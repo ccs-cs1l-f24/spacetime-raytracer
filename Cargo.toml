@@ -1,0 +1,23 @@
+[package]
+name = "spacetime-raytracer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+egui = { path = "../egui/crates/egui" }
+egui-winit = { path = "../egui/crates/egui-winit" }
+egui_winit_vulkano = { path = "../egui_winit_vulkano" }
+
+log = "0.4.22"
+
+nalgebra = { version = "0.33.0" }
+
+png = "0.17.14"
+
+shaderc = "0.8.3"
+smallvec = "1.8"
+
+vulkano = { path = "../vulkano/vulkano" }
+
+winit = { version = "0.30.5", features = ["rwh_06", "x11", "wayland", "wayland-dlopen", "wayland-csd-adwaita"] }
