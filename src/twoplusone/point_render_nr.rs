@@ -98,7 +98,7 @@ pub fn create_point_render_pipelines(base: &BaseGpuState) -> PointRenderPipeline
         .compile_into_spirv(
             include_str!("points_norel.glsl"),
             shaderc::ShaderKind::DefaultVertex,
-            "points_norel",
+            "points_norel_vert",
             "main",
             Some(&opts),
         )
@@ -119,7 +119,7 @@ pub fn create_point_render_pipelines(base: &BaseGpuState) -> PointRenderPipeline
         .compile_into_spirv(
             include_str!("points_norel.glsl"),
             shaderc::ShaderKind::DefaultFragment,
-            "points_norel",
+            "points_norel_frag",
             "main",
             Some(&opts),
         )
