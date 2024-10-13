@@ -33,7 +33,7 @@ pub fn render(
     base: &BaseGpuState,
     debugcfg: &crate::debugui::HotswapConfig,
     cmd_buf: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-    softbodies: &super::softbody::SoftbodyRegistry,
+    softbodies: &super::SoftbodyRegistry,
     point_render_pipelines: &PointRenderPipelines,
 ) {
     cmd_buf
@@ -166,7 +166,7 @@ pub fn create_point_render_pipelines(base: &BaseGpuState) -> PointRenderPipeline
                 .bindings([(
                     0,
                     VertexInputBindingDescription {
-                        stride: size_of::<super::softbody::Particle>() as u32,
+                        stride: size_of::<super::Particle>() as u32,
                         input_rate: VertexInputRate::Vertex,
                     },
                 )]),

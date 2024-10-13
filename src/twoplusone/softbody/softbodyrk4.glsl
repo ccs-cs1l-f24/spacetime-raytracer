@@ -2,14 +2,18 @@
 
 #pragma vscode_glsllint_stage : comp
 
-// see softbody.rs
-// (should be) the same memory layout
 struct Particle {
     ivec4 immediate_neighbors;
     ivec4 diagonal_neighbors;
     vec2 ground_pos;
     vec2 ground_vel;
     float rest_mass;
+    uint object_index;
+};
+
+struct Object {
+    uint offset; // in the main particle buffers
+    uint material_index;
 };
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
@@ -44,15 +48,26 @@ layout(set = 0, binding = 3) buffer ForcesAccum {
     vec2 force_acc[];
 };
 
-// https://www.youtube.com/watch?v=rSKMYc1CQHE
-// https://web.archive.org/web/20140725014123/https://docs.nvidia.com/cuda/samples/5_Simulations/particles/doc/particles.pdf
-// i love sebastian lague :))
+// // https://www.youtube.com/watch?v=rSKMYc1CQHE
+// // https://web.archive.org/web/20140725014123/https://docs.nvidia.com/cuda/samples/5_Simulations/particles/doc/particles.pdf
+// // i love sebastian lague :))
+// // i think we only need to update the spatial lookup once per full rk4 invokation
+// // probably actually only once per couple frames honestly
+// // since we consider every particle from a neighboring grid cell when doing detection
+// // (updating this grid goes in a different glsl file)
 // layout(set = 1, binding = 0) buffer CollisionGrid {
 //     // cell hash, particle index (sorted by cell hash)
 //     ivec2 spatial_lookup[];
 //     // cell hash => where associated particle indices start in spatial_lookup
 //     int start_indices[];
 // };
+
+layout(set = 2, binding = 0) uniform Objects {
+    // max uniform buffer size is 65536
+    // so we get 8192 different objects at max
+    // which seems like plenty
+    Object objects[8192];
+};
 
 layout(push_constant) uniform DebugSettings {
     // rk4 timestep in cs/s
