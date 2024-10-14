@@ -54,9 +54,9 @@ pub mod point_render_nr;
 // we'll also have point-based rendering, for debugging purposes
 
 // TODO replace with SoftbodyState
-pub struct SoftbodyRegistry {
-    pub bodies: Vec<SoftbodyModel>,
-}
+// pub struct SoftbodyRegistry {
+//     pub bodies: Vec<SoftbodyModel>,
+// }
 
 // 56 bytes, not too bad
 #[derive(BufferContents, Debug)]
@@ -80,92 +80,6 @@ pub struct Object {
     pub material_index: u32,
 }
 
-// i guess we don't need much per-object state
-// since softbodies are just collections of point masses
-// well eventually we'll need materials i guess
-// TODO GET RID OF THIS & REPLACE W/SOFTBODY STATE
-pub struct SoftbodyModel {
-    pub staging_buffer: Subbuffer<[Particle]>,
-    pub gpu_buffer: Subbuffer<[Particle]>,
-}
-
-impl SoftbodyModel {
-    // BLOCKS on the upload
-    fn upload(&self, particles: &[Particle], base: &BaseGpuState) {
-        // cpu copy
-        let staging_ptr = self.staging_buffer.mapped_slice().unwrap().as_ptr() as *mut Particle;
-        unsafe {
-            std::ptr::copy(particles.as_ptr(), staging_ptr, particles.len());
-        }
-        let _ = staging_ptr;
-
-        // cpu-gpu upload
-        let mut cbuf_builder = base.create_primary_command_buffer();
-        cbuf_builder
-            .copy_buffer(CopyBufferInfo {
-                regions: SmallVec::from_buf([BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 0,
-                    size: (particles.len() * size_of::<Particle>()) as u64,
-                    ..Default::default()
-                }]),
-                ..CopyBufferInfo::buffers(
-                    self.staging_buffer.as_bytes().clone(),
-                    self.gpu_buffer.as_bytes().clone(),
-                )
-            })
-            .unwrap();
-        let cbuf = cbuf_builder.build().unwrap();
-        vulkano::sync::now(base.device.clone())
-            .then_execute(base.queue.clone(), cbuf)
-            .unwrap()
-            .then_signal_fence_and_flush()
-            .unwrap()
-            .wait(None)
-            .unwrap();
-    }
-    // TODO also add a download
-    // for cpuside delaunay triangulation
-}
-
-fn allocate_and_upload_model(particles: &[Particle], base: &BaseGpuState) -> SoftbodyModel {
-    let staging_buffer = Buffer::new_slice::<Particle>(
-        base.memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::TRANSFER_SRC,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-            ..Default::default()
-        },
-        particles.len() as u64,
-    )
-    .unwrap();
-    let gpu_buffer = Buffer::new_slice::<Particle>(
-        base.memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::TRANSFER_DST
-                | BufferUsage::VERTEX_BUFFER
-                | BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
-            ..Default::default()
-        },
-        particles.len() as u64,
-    )
-    .unwrap();
-    let model = SoftbodyModel {
-        staging_buffer,
-        gpu_buffer,
-    };
-    model.upload(particles, base);
-    model
-}
-
 // we want resolutions of approximately 1 lightstep (ch where h is simulation tick)
 // let's set an arbitrary resolution of 0.005 cs per pixel (200 particles per lightsecond)
 // please only feed this 8-bit depth RGB images cause everything else will fail
@@ -174,7 +88,7 @@ pub fn image_to_softbody<R: std::io::Read>(
     r: R,
     base: &BaseGpuState,
     object_index: u32,
-) -> SoftbodyModel {
+) -> Vec<Particle> {
     let decoder = png::Decoder::new(r);
     let mut reader = decoder.read_info().unwrap();
     let mut buf = vec![0; reader.output_buffer_size()];
@@ -227,7 +141,7 @@ pub fn image_to_softbody<R: std::io::Read>(
             particles[index].diagonal_neighbors[3] = *neighbor as i32;
         }
     }
-    allocate_and_upload_model(&particles, base)
+    particles
 }
 
 // pub struct CollisionGrid {
@@ -258,7 +172,7 @@ pub struct SoftbodyState {
 impl SoftbodyState {
     // (how much should be allocated)
     const MAX_OBJECTS: u64 = 8192; // 2^16 bytes
-    const MAX_PARTICLES: u64 = 2 >> 20;
+    const MAX_PARTICLES: u64 = 1 << 20;
     pub fn create(base: &BaseGpuState) -> Self {
         let particle_staging = Buffer::new_slice::<Particle>(
             base.memory_allocator.clone(),
@@ -292,9 +206,7 @@ impl SoftbodyState {
         let particle_buf_intermediate1 = Buffer::new_slice::<Particle>(
             base.memory_allocator.clone(),
             BufferCreateInfo {
-                usage: BufferUsage::TRANSFER_DST
-                    | BufferUsage::VERTEX_BUFFER
-                    | BufferUsage::STORAGE_BUFFER,
+                usage: BufferUsage::STORAGE_BUFFER,
                 ..Default::default()
             },
             AllocationCreateInfo {
@@ -307,9 +219,7 @@ impl SoftbodyState {
         let particle_buf_intermediate2 = Buffer::new_slice::<Particle>(
             base.memory_allocator.clone(),
             BufferCreateInfo {
-                usage: BufferUsage::TRANSFER_DST
-                    | BufferUsage::VERTEX_BUFFER
-                    | BufferUsage::STORAGE_BUFFER,
+                usage: BufferUsage::STORAGE_BUFFER,
                 ..Default::default()
             },
             AllocationCreateInfo {
@@ -322,9 +232,7 @@ impl SoftbodyState {
         let forcesum = Buffer::new_slice::<f32>(
             base.memory_allocator.clone(),
             BufferCreateInfo {
-                usage: BufferUsage::TRANSFER_DST
-                    | BufferUsage::VERTEX_BUFFER
-                    | BufferUsage::STORAGE_BUFFER,
+                usage: BufferUsage::STORAGE_BUFFER,
                 ..Default::default()
             },
             AllocationCreateInfo {
@@ -351,9 +259,7 @@ impl SoftbodyState {
         let object_buf = Buffer::new_slice::<Object>(
             base.memory_allocator.clone(),
             BufferCreateInfo {
-                usage: BufferUsage::TRANSFER_DST
-                    | BufferUsage::VERTEX_BUFFER
-                    | BufferUsage::STORAGE_BUFFER,
+                usage: BufferUsage::TRANSFER_DST | BufferUsage::STORAGE_BUFFER,
                 ..Default::default()
             },
             AllocationCreateInfo {
@@ -432,7 +338,10 @@ impl SoftbodyState {
             .wait(None)
             .unwrap();
     }
-    pub fn dispatch_euler(&self, base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) {}
+
+    pub fn dispatch_euler(&self, base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) {
+        //
+    }
     pub fn dispatch_rk4(&self, base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) {
         todo!()
     }
@@ -500,6 +409,12 @@ impl SoftbodyState {
         }
         let _ = particle_staging_ptr;
         let _ = object_staging_ptr;
+    }
+
+    // note that this function does NOT invoke push
+    pub fn add_particles(&mut self, other: &mut Vec<Particle>, object: Object) {
+        self.particles.append(other);
+        self.objects.push(object);
     }
 }
 

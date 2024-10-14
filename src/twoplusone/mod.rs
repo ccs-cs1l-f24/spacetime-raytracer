@@ -38,21 +38,26 @@ pub fn create_pipeline_manager(base: &BaseGpuState) -> PipelineManager {
 }
 
 pub struct World {
-    pub softbodies: softbody::SoftbodyRegistry,
+    pub softbody_state: softbody::SoftbodyState,
     // aloofbodies (floating)
     // player observer (potentially tethered to a softbody or pointbody)
 }
 
 pub fn create_world(base: &BaseGpuState) -> World {
-    World {
-        softbodies: softbody::SoftbodyRegistry {
-            bodies: vec![softbody::image_to_softbody(
-                include_bytes!("../../softbodyimages/testimg.png").as_slice(),
-                base,
-                0,
-            )],
+    let mut softbody_state = softbody::SoftbodyState::create(base);
+    softbody_state.add_particles(
+        &mut softbody::image_to_softbody(
+            include_bytes!("../../softbodyimages/testimg.png").as_slice(),
+            base,
+            0,
+        ),
+        softbody::Object {
+            offset: 0,
+            material_index: 0,
         },
-    }
+    );
+    softbody_state.push(base);
+    World { softbody_state }
 }
 
 pub struct Observer {

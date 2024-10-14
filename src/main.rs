@@ -209,7 +209,7 @@ impl winit::application::ApplicationHandler for App {
                         base_gpu,
                         &debug_ui_state.config,
                         &mut cmd_buf,
-                        &world.softbodies,
+                        &world.softbody_state,
                         &pipeline_manager.point_pipelines,
                     );
                     let cmd_buf = cmd_buf.build().unwrap();
