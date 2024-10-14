@@ -69,10 +69,12 @@ layout(set = 2, binding = 0) uniform Objects {
     Object objects[8192];
 };
 
-layout(push_constant) uniform DebugSettings {
+layout(push_constant) uniform Settings {
     // rk4 timestep in cs/s
     // (0.01?)
     float h;
+    // workgroup size is 256 so this is to make sure we don't overread/write the particle bufs
+    uint num_particles;
 };
 
 // the forces applied to a particle are:

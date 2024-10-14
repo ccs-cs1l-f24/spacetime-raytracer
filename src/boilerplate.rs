@@ -6,6 +6,9 @@ use vulkano::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
         PrimaryAutoCommandBuffer,
     },
+    descriptor_set::allocator::{
+        StandardDescriptorSetAllocator, StandardDescriptorSetAllocatorCreateInfo,
+    },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
         Device, DeviceCreateInfo, DeviceExtensions, DeviceOwned, Features, Queue, QueueCreateInfo,
@@ -122,6 +125,7 @@ pub struct BaseGpuState {
 
     pub memory_allocator: Arc<StandardMemoryAllocator>,
     pub command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+    pub descriptor_set_allocator: StandardDescriptorSetAllocator,
 
     pub rpass_manager: RpassManager,
 
@@ -567,6 +571,15 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         Default::default(),
     ));
 
+    let descriptor_set_allocator = StandardDescriptorSetAllocator::new(
+        device.clone(),
+        StandardDescriptorSetAllocatorCreateInfo {
+            set_count: 32,
+            update_after_bind: false,
+            ..Default::default()
+        },
+    );
+
     let rpass_manager = RpassManager::create(device.clone(), &swapchain_manager);
 
     BaseGpuState {
@@ -580,6 +593,7 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         swapchain_manager,
         memory_allocator,
         command_buffer_allocator,
+        descriptor_set_allocator,
         rpass_manager,
         // TODO i might consider the possibility of shifting shader compilation to the build stage
         // instead of stitching the SPIR-V together at runtime

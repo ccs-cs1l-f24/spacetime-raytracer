@@ -8,8 +8,6 @@ use nalgebra::{Rotation2, Vector2};
 pub const C: f32 = 1.0;
 // c^2
 pub const C2: f32 = C * C;
-// max(screensize.x, screensize.y) / cs
-pub const CS_TO_SCREENSPACE: f32 = 0.5;
 
 // some additional unit definitions:
 //  cf = c * frame length = lightframe
