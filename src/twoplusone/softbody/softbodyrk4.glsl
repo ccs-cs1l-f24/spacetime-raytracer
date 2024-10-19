@@ -72,11 +72,17 @@ layout(set = 1, binding = 0) uniform Objects {
 };
 
 layout(push_constant) uniform Settings {
+    // // mouse pos (for debugging purposes)
+    // vec2 mouse_pos;
+    // workgroup size is 256 so this is to make sure we don't overread/write the particle bufs
+    uint num_particles;
     // rk4 timestep in cs/s
     // (0.01?)
     float h;
-    // workgroup size is 256 so this is to make sure we don't overread/write the particle bufs
-    uint num_particles;
+    // spring constants
+    float immediate_neighbor_dist;
+    float diagonal_neighbor_dist;
+    float k;
 };
 
 // the forces applied to a particle are:
@@ -86,11 +92,31 @@ layout(push_constant) uniform Settings {
 vec2 get_forces() {
     Object o = objects[0];
     Particle particle = state_particles[gl_GlobalInvocationID.x];
-    // forces keeping the object together
-    if (particle.immediate_neighbors[0] != -1) {
-        Particle n1 = state_particles[particle.immediate_neighbors[0]];
+    vec2 forces = vec2(0.0, 0.0); // we accumulate forces here
+
+    // springs adhering the object together
+    // ideally the spring grid is fine enough that each |d| is at most 1 lightframe
+    // and we can treat the spring forces as instantaneously accurate
+    // F = -k(|d| - r) * (d/|d|) where d = p_1 - p_2
+    for (int i = 0; i < 4; i++) { // this loop should unroll... if there are performance issues i can manually unroll
+        if (particle.immediate_neighbors[i] != -1) {
+            Particle n = state_particles[particle.immediate_neighbors[i]];
+            vec2 d = particle.ground_pos - n.ground_pos;
+            forces += -k * (length(d) - immediate_neighbor_dist) * normalize(d);
+        }
     }
-    return vec2(0.0, 0.1);
+    for (int i = 0; i < 4; i++) {
+        if (particle.diagonal_neighbors[i] != -1) {
+            Particle n = state_particles[particle.diagonal_neighbors[i]];
+            vec2 d = particle.ground_pos - n.ground_pos;
+            forces += -k * (length(d) - diagonal_neighbor_dist) * normalize(d);
+        }
+    }
+    if (particle.ground_pos.x < 0.2) {
+        forces += vec2(0.1, 0.0);
+    }
+
+    return forces;
 }
 
 // euler (state_particles is original_particles)
