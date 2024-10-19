@@ -9,6 +9,8 @@ struct Particle {
     vec2 ground_vel;
     float rest_mass;
     uint object_index;
+    uint _a; // we love padding :)
+    uint _b;
 };
 
 struct Object {
@@ -82,8 +84,12 @@ layout(push_constant) uniform Settings {
 // - collisions
 // - global forces (gravity?, wind?, etc)
 vec2 get_forces() {
-    Particle particle = state_particles[gl_GlobalInvocationID.x];
     Object o = objects[0];
+    Particle particle = state_particles[gl_GlobalInvocationID.x];
+    // forces keeping the object together
+    if (particle.immediate_neighbors[0] != -1) {
+        Particle n1 = state_particles[particle.immediate_neighbors[0]];
+    }
     return vec2(0.0, 0.1);
 }
 

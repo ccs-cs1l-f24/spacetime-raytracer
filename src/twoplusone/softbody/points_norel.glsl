@@ -16,6 +16,7 @@
 
     layout(push_constant) uniform Info {
         vec2 worldspace_to_screenspace;
+        // vec2 camera_position;
     };
 
     void main() {

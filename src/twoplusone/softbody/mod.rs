@@ -389,6 +389,21 @@ impl SoftbodyState {
             .unwrap();
     }
 
+    // TODO maybe add a thing to then copy particle_buf to some other buffer
+    // for both points_norel and the particle culler
+    pub fn submit_per_frame_compute(
+        &self,
+        base: &BaseGpuState,
+        pipelines: &SoftbodyComputePipelines,
+    ) -> Box<dyn GpuFuture> {
+        let mut cmd_buf = base.create_primary_command_buffer();
+        self.dispatch_euler(pipelines, &mut cmd_buf);
+        vulkano::sync::now(base.device.clone())
+            .then_execute(base.queue.clone(), cmd_buf.build().unwrap())
+            .unwrap()
+            .boxed()
+    }
+
     pub fn dispatch_euler(
         &self,
         pipelines: &SoftbodyComputePipelines,
