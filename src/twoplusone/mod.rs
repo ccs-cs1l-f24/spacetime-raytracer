@@ -1,5 +1,3 @@
-use nalgebra::Vector2;
-
 use crate::boilerplate::BaseGpuState;
 
 pub mod aloofbody;
@@ -63,7 +61,7 @@ pub fn create_world(base: &BaseGpuState, pipelines: &PipelineManager) -> World {
     World { softbody_state }
 }
 
-pub struct Observer {
-    pub ground_pos: Vector2<f32>,
-    pub ground_vel: Vector2<f32>,
-}
+// pub struct Observer {
+//     pub ground_pos: Vector2<f32>,
+//     pub ground_vel: Vector2<f32>,
+// }

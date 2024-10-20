@@ -9,7 +9,7 @@ use crate::boilerplate::BaseGpuState;
 pub struct HotswapConfig {
     // rendering options
     pub max_fps: u32,
-    pub fullscreen: bool,
+    // pub fullscreen: bool,
     // lightseconds per screenspace (whichever of window width/height is bigger)
     pub scale: f32,
     // present mode?
@@ -29,10 +29,10 @@ impl Default for HotswapConfig {
     fn default() -> Self {
         Self {
             max_fps: 144,
-            fullscreen: false,
+            // fullscreen: false,
             scale: 1.0,
             h: 0.005,
-            k: 50.0,
+            k: 300.0,
         }
     }
 }
@@ -101,7 +101,7 @@ impl DebugUiState {
                     });
                     ui.horizontal(|ui| {
                         ui.label("k");
-                        ui.add(egui::Slider::new(&mut self.config.k, 50.0..=500.0));
+                        ui.add(egui::Slider::new(&mut self.config.k, 100.0..=2000.0));
                     });
                 });
         })
