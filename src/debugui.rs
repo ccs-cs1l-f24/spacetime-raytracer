@@ -32,7 +32,7 @@ impl Default for HotswapConfig {
             // fullscreen: false,
             scale: 1.0,
             h: 0.005,
-            k: 300.0,
+            k: 2000.0,
         }
     }
 }
@@ -101,7 +101,7 @@ impl DebugUiState {
                     });
                     ui.horizontal(|ui| {
                         ui.label("k");
-                        ui.add(egui::Slider::new(&mut self.config.k, 100.0..=2000.0));
+                        ui.add(egui::Slider::new(&mut self.config.k, 100.0..=5000.0));
                     });
                 });
         })
