@@ -212,15 +212,6 @@ impl winit::application::ApplicationHandler for App {
                         *recreate_swapchain = true;
                     }
 
-                    // TEMPORARY
-                    // this would otherwise be put after the render submission, to avoid wasting time idling
-                    // but we put it here because points_norel uses softbody state's particle buf
-                    // and surely that frame would be done now RIGHT??
-                    *in_flight_physics = Some(world.softbody_state.submit_per_frame_compute(
-                        &base_gpu,
-                        &pipeline_manager.softbody_compute,
-                        &debug_ui_state.config,
-                    ));
                     // wait on the in-flight physics before composing/submitting the next render op
                     if let Some(blocking_physics) = in_flight_physics.take() {
                         blocking_physics
@@ -230,6 +221,8 @@ impl winit::application::ApplicationHandler for App {
                             .unwrap();
                     }
 
+                    // scene rendering for this frame
+                    // (everything except the debug ui)
                     let mut cmd_buf = base_gpu.create_primary_command_buffer();
                     twoplusone::softbody::point_render_nr::render(
                         present_image_index,
@@ -243,10 +236,11 @@ impl winit::application::ApplicationHandler for App {
                         [1.0, 1.0],
                     );
                     let cmd_buf = cmd_buf.build().unwrap();
+
                     let mut prev_frame_in_flight_future = base_gpu
                         .swapchain_manager
                         .take_frame_in_flight_future(present_image_index);
-                    // make sure to clean up the fences
+                    // make sure to clean up the fences so they don't accumulate
                     prev_frame_in_flight_future.cleanup_finished();
 
                     // import this otherwise i can't build the future :P
@@ -284,12 +278,12 @@ impl winit::application::ApplicationHandler for App {
                         }
                     }
 
-                    // // submit the physics for the next frame :)
-                    // *in_flight_physics =
-                    //     Some(world.softbody_state.submit_per_frame_compute(
-                    //         &base_gpu,
-                    //         &pipeline_manager.softbody_compute,
-                    //     ));
+                    // submit the physics for the next frame :)
+                    *in_flight_physics = Some(world.softbody_state.submit_per_frame_compute(
+                        &base_gpu,
+                        &pipeline_manager.softbody_compute,
+                        &debug_ui_state.config,
+                    ));
                 } else {
                     unreachable!("Init state really must exist by now")
                 }

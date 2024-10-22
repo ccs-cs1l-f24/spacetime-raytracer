@@ -52,19 +52,11 @@ layout(set = 0, binding = 3) buffer ForcesAccum {
 };
 
 layout(set = 1, binding = 0) uniform Objects {
-    // max uniform buffer size is 65536
-    // so we get 8192 different objects at max
-    // which seems like plenty
-    Object objects[8192];
+    // max uniform buffer size should be at least 65536
+    // we should be able to fit at LEAST 1024 objects in that space
+    Object objects[1024];
 };
 
-// // https://www.youtube.com/watch?v=rSKMYc1CQHE
-// // https://web.archive.org/web/20140725014123/https://docs.nvidia.com/cuda/samples/5_Simulations/particles/doc/particles.pdf
-// // i love sebastian lague :))
-// // i think we only need to update the spatial lookup once per full rk4 invokation
-// // probably actually only once per couple frames honestly
-// // since we consider every particle from a neighboring grid cell when doing detection
-// // (updating this grid goes in a different glsl file)
 // layout(set = 2, binding = 0) buffer CollisionGrid1 {
 //     // cell hash, particle index (sorted by cell hash)
 //     ivec2 spatial_lookup[];
@@ -93,7 +85,7 @@ layout(push_constant) uniform Settings {
 // - collisions
 // - global forces (gravity?, wind?, etc)
 vec2 get_forces() {
-    Object o = objects[0];
+    Object o = objects[0]; // to stop vulkano from complaining about an unused descset binding
     Particle particle = state_particles[gl_GlobalInvocationID.x];
     vec2 forces = vec2(0.0, 0.0); // we accumulate forces here
 
