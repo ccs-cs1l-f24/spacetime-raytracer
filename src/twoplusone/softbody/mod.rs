@@ -177,9 +177,9 @@ pub struct SoftbodyState {
     particles: Vec<Particle>,
     objects: Vec<Object>, // fixed at 8192, since it's a uniform buffer
 
-    // euler/rk4
+    // rk4 buffers & descsets
     particle_staging: Subbuffer<[Particle]>,
-    particle_buf: Subbuffer<[Particle]>,
+    particle_buf: Subbuffer<[Particle]>, // also used by the collision grid descsetl
     particle_buf_intermediate1: Subbuffer<[Particle]>,
     particle_buf_intermediate2: Subbuffer<[Particle]>,
     #[allow(unused)]
@@ -191,13 +191,17 @@ pub struct SoftbodyState {
     rk4_2_ds: Arc<PersistentDescriptorSet>,
     rk4_4_ds: Arc<PersistentDescriptorSet>,
 
-    // objects
     object_staging: Subbuffer<[Object]>,
     object_buf: Subbuffer<[Object]>,
 
     object_ds: Arc<PersistentDescriptorSet>,
-    // collision
 
+    // collision buffers & descsets
+    #[allow(unused)]
+    spatial_lookup: Subbuffer<[[u32; 2]]>,
+    #[allow(unused)]
+    start_indices: Subbuffer<[u32]>,
+    collision_update_ds: Arc<PersistentDescriptorSet>,
     // culling/meshing/render
 }
 
@@ -371,6 +375,43 @@ impl SoftbodyState {
             [],
         )
         .unwrap();
+        let spatial_lookup = Buffer::new_slice::<[u32; 2]>(
+            base.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::STORAGE_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+                ..Default::default()
+            },
+            Self::MAX_PARTICLES,
+        )
+        .unwrap();
+        let start_indices = Buffer::new_slice::<u32>(
+            base.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::STORAGE_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+                ..Default::default()
+            },
+            Self::MAX_PARTICLES,
+        )
+        .unwrap();
+        let collision_update_ds = PersistentDescriptorSet::new(
+            &base.descriptor_set_allocator,
+            pipelines.collision_grid_set_layout.clone(),
+            [
+                WriteDescriptorSet::buffer(0, particle_buf.clone()),
+                WriteDescriptorSet::buffer(1, spatial_lookup.clone()),
+                WriteDescriptorSet::buffer(2, start_indices.clone()),
+            ],
+            [],
+        )
+        .unwrap();
         Self {
             particles: vec![],
             objects: vec![],
@@ -387,6 +428,9 @@ impl SoftbodyState {
             object_staging,
             object_buf,
             object_ds,
+            spatial_lookup,
+            start_indices,
+            collision_update_ds,
         }
     }
 
@@ -486,12 +530,15 @@ impl SoftbodyState {
         let mut cmd_buf = base.create_primary_command_buffer();
         // self.dispatch_euler(pipelines, &mut cmd_buf, debug_cfg);
         self.dispatch_rk4(pipelines, &mut cmd_buf, debug_cfg);
+        self.dispatch_update_compute_grid(pipelines, &mut cmd_buf);
         vulkano::sync::now(base.device.clone())
             .then_execute(base.queue.clone(), cmd_buf.build().unwrap())
             .unwrap()
             .boxed()
     }
 
+    // unstable, strictly worse than rk4
+    // well it probably is faster but not enough to justify the explosions
     #[allow(unused)]
     fn dispatch_euler(
         &self,
@@ -605,8 +652,64 @@ impl SoftbodyState {
             .unwrap();
     }
 
-    pub fn update_collision_grid(&self, pipelines: &SoftbodyComputePipelines) {
-        todo!()
+    // https://www.youtube.com/watch?v=rSKMYc1CQHE
+    // sebastian lague
+    fn dispatch_update_compute_grid(
+        &self,
+        pipelines: &SoftbodyComputePipelines,
+        cmd_buf: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+    ) {
+        let pcs = CollisionGridPushConstants {
+            num_particles: self.particles.len() as u32,
+            grid_resolution: 0.02,
+            group_width: 0,
+            group_height: 0,
+            step_index: 0,
+        };
+        cmd_buf
+            .bind_pipeline_compute(pipelines.fill_lookup.clone())
+            .unwrap()
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                pipelines.collision_pipeline_layout.clone(),
+                0,
+                self.collision_update_ds.clone(),
+            )
+            .unwrap()
+            .push_constants(pipelines.collision_pipeline_layout.clone(), 0, pcs.clone())
+            .unwrap()
+            .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
+            .unwrap();
+        cmd_buf
+            .bind_pipeline_compute(pipelines.sort_lookup.clone())
+            .unwrap();
+        let num_pairs = self.particles.len().next_power_of_two() as u32 / 2;
+        let num_stages = (num_pairs * 2).ilog2();
+        for stage_index in 0..num_stages {
+            for step_index in 0..=stage_index {
+                let group_width = 1 << (stage_index - step_index);
+                let group_height = 2 * group_width - 1;
+                cmd_buf
+                    .push_constants(
+                        pipelines.collision_pipeline_layout.clone(),
+                        0,
+                        CollisionGridPushConstants {
+                            group_width,
+                            group_height,
+                            step_index,
+                            ..pcs
+                        },
+                    )
+                    .unwrap()
+                    .dispatch([num_pairs / 256, 1, 1])
+                    .unwrap();
+            }
+        }
+        cmd_buf
+            .bind_pipeline_compute(pipelines.update_start_indices.clone())
+            .unwrap()
+            .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
+            .unwrap();
     }
 
     // pub fn cull_meshes(&self, pipelines: &SoftbodyComputePipelines) {
