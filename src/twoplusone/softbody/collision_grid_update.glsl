@@ -15,23 +15,23 @@ struct Particle {
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
-layout(set = 0, binding = 0) buffer Particles {
-    // cell hash, particle index (sorted by cell hash)
-    Particle particles[];
-};
-
 // https://www.youtube.com/watch?v=rSKMYc1CQHE
 // https://web.archive.org/web/20140725014123/https://docs.nvidia.com/cuda/samples/5_Simulations/particles/doc/particles.pdf
 // i love sebastian lague :))
 // i think we only need to update the spatial lookup once per full rk4 invokation
 // probably actually only once per couple frames honestly
 // since we consider every particle from a neighboring grid cell when doing detection
-layout(set = 1, binding = 0) buffer CollisionGrid1 {
+layout(set = 0, binding = 0) buffer Particles {
+    // cell hash, particle index (sorted by cell hash)
+    // one per particle
+    Particle particles[];
+};
+layout(set = 0, binding = 1) buffer SpatialLookup {
     // cell hash, particle index (sorted by cell hash)
     // one per particle
     uvec2 spatial_lookup[];
 };
-layout(set = 1, binding = 1) buffer CollisionGrid2 {
+layout(set = 0, binding = 2) buffer StartIndices {
     // cell hash => where associated particle indices start in spatial_lookup
     // one per particle
     uint start_indices[];
@@ -65,7 +65,7 @@ uint key_from_hash(uint hash) {
 
 // generates a cell key for each particle
 // seeds the spatial lookup with (cell_key, particle_index) pairs
-#ifdef CGRID_HASH
+#ifdef FILL_LOOKUP
     void main() {
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;
@@ -79,7 +79,7 @@ uint key_from_hash(uint hash) {
 
 // sorts the spatial lookup
 // writes the start indices
-#ifdef CGRID_SORT_LOOKUP
+#ifdef SORT_LOOKUP
     void main() {
         uint index = gl_GlobalInvocationID.x;
         uint h = index & (group_width - 1);
@@ -95,12 +95,12 @@ uint key_from_hash(uint hash) {
     }
 #endif
 
-#ifdef CGRID_UPDATE_START_INDICES
+#ifdef UPDATE_START_INDICES
     void main() {
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;
         uint key = spatial_lookup[index].x;
-        uint prev_key = i == 0 ? 4294967295 : spatial_lookup[i - 1].x;
+        uint prev_key = index == 0 ? 4294967295 : spatial_lookup[index - 1].x;
         if (key != prev_key) start_indices[key] = index;
         else start_indices[key] = 4294967295;
     }

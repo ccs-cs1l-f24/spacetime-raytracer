@@ -87,12 +87,23 @@ pub struct Object {
 
 #[derive(BufferContents, Debug, Clone)]
 #[repr(C)]
-pub struct PushConstants {
+pub struct Rk4PushConstants {
     num_particles: u32,
     h: f32,
     immediate_neighbor_dist: f32,
     diagonal_neighbor_dist: f32,
     k: f32,
+}
+
+#[derive(BufferContents, Debug, Clone)]
+#[repr(C)]
+pub struct CollisionGridPushConstants {
+    pub num_particles: u32,
+    pub grid_resolution: f32,
+
+    pub group_width: u32,
+    pub group_height: u32,
+    pub step_index: u32,
 }
 
 // we want resolutions of approximately 1 lightstep (ch where h is simulation tick)
@@ -494,7 +505,7 @@ impl SoftbodyState {
             .push_constants(
                 pipelines.rk4_pipeline_layout.clone(),
                 0,
-                PushConstants {
+                Rk4PushConstants {
                     // TODO make these more configurable
                     // slash always correct
                     num_particles: self.particles.len() as u32,
@@ -528,7 +539,7 @@ impl SoftbodyState {
             .push_constants(
                 pipelines.rk4_pipeline_layout.clone(),
                 0,
-                PushConstants {
+                Rk4PushConstants {
                     // TODO make these more configurable
                     // slash always correct
                     num_particles: self.particles.len() as u32,
@@ -594,9 +605,10 @@ impl SoftbodyState {
             .unwrap();
     }
 
-    // pub fn update_collision_grid(&self, pipelines: &SoftbodyComputePipelines) {
-    //     todo!()
-    // }
+    pub fn update_collision_grid(&self, pipelines: &SoftbodyComputePipelines) {
+        todo!()
+    }
+
     // pub fn cull_meshes(&self, pipelines: &SoftbodyComputePipelines) {
     //     todo!()
     // }
@@ -609,22 +621,26 @@ impl SoftbodyState {
 }
 
 pub struct SoftbodyComputePipelines {
+    // both of these are actually for rk4
     rk4_set_layout: Arc<DescriptorSetLayout>,
-    // collision_grid_set_layout: Arc<DescriptorSetLayout>,
     objects_set_layout: Arc<DescriptorSetLayout>,
 
-    // pipeline layout (same for each of these pipelines lol)
-    rk4_pipeline_layout: Arc<PipelineLayout>,
-    // euler
-    euler: Arc<ComputePipeline>,
+    collision_grid_set_layout: Arc<DescriptorSetLayout>,
+
     // rk4
+    rk4_pipeline_layout: Arc<PipelineLayout>,
+    euler: Arc<ComputePipeline>,
     rk4_0: Arc<ComputePipeline>,
     rk4_1: Arc<ComputePipeline>,
     rk4_2: Arc<ComputePipeline>,
     rk4_3: Arc<ComputePipeline>,
     rk4_4: Arc<ComputePipeline>,
-    // collision (w/another pipeline layout)
-    // (TODO)
+
+    // collision
+    collision_pipeline_layout: Arc<PipelineLayout>,
+    fill_lookup: Arc<ComputePipeline>,
+    sort_lookup: Arc<ComputePipeline>,
+    update_start_indices: Arc<ComputePipeline>,
 }
 
 pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyComputePipelines {
@@ -669,7 +685,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
             push_constant_ranges: vec![PushConstantRange {
                 stages: ShaderStages::COMPUTE,
                 offset: 0,
-                size: size_of::<PushConstants>() as u32,
+                size: size_of::<Rk4PushConstants>() as u32,
             }],
             set_layouts: vec![rk4_set_layout.clone(), objects_set_layout.clone()],
             ..Default::default()
@@ -880,10 +896,147 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         },
     )
     .unwrap();
+    let collision_grid_set_layout = DescriptorSetLayout::new(
+        base.device.clone(),
+        DescriptorSetLayoutCreateInfo {
+            bindings: {
+                let binding = DescriptorSetLayoutBinding {
+                    stages: ShaderStages::COMPUTE,
+                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer)
+                };
+                let mut tree = BTreeMap::new();
+                tree.insert(0, binding.clone());
+                tree.insert(1, binding.clone());
+                tree.insert(2, binding.clone());
+                tree
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let collision_pipeline_layout = PipelineLayout::new(
+        base.device.clone(),
+        PipelineLayoutCreateInfo {
+            set_layouts: vec![collision_grid_set_layout.clone()],
+            push_constant_ranges: vec![PushConstantRange {
+                offset: 0,
+                size: size_of::<CollisionGridPushConstants>() as u32,
+                stages: ShaderStages::COMPUTE,
+            }],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.set_include_callback(super::include_callback);
+    opts.add_macro_definition("FILL_LOOKUP", None);
+    let shader = base
+        .shader_loader
+        .compile_into_spirv(
+            include_str!("collision_grid_update.glsl"),
+            shaderc::ShaderKind::DefaultCompute,
+            "cgrid_fill_lookup",
+            "main",
+            Some(&opts),
+        )
+        .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(shader.as_binary()),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let fill_lookup = ComputePipeline::new(
+        base.device.clone(),
+        None,
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                collision_pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
+
+    let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.set_include_callback(super::include_callback);
+    opts.add_macro_definition("SORT_LOOKUP", None);
+    let shader = base
+        .shader_loader
+        .compile_into_spirv(
+            include_str!("collision_grid_update.glsl"),
+            shaderc::ShaderKind::DefaultCompute,
+            "cgrid_sort_lookup",
+            "main",
+            Some(&opts),
+        )
+        .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(shader.as_binary()),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let sort_lookup = ComputePipeline::new(
+        base.device.clone(),
+        None,
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                collision_pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
+
+    let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.set_include_callback(super::include_callback);
+    opts.add_macro_definition("UPDATE_START_INDICES", None);
+    let shader = base
+        .shader_loader
+        .compile_into_spirv(
+            include_str!("collision_grid_update.glsl"),
+            shaderc::ShaderKind::DefaultCompute,
+            "update_start_indices",
+            "main",
+            Some(&opts),
+        )
+        .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(shader.as_binary()),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let update_start_indices = ComputePipeline::new(
+        base.device.clone(),
+        None,
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                collision_pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
 
     SoftbodyComputePipelines {
         rk4_set_layout,
         objects_set_layout,
+        collision_grid_set_layout,
         rk4_pipeline_layout,
         euler,
         rk4_0,
@@ -891,5 +1044,9 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         rk4_2,
         rk4_3,
         rk4_4,
+        collision_pipeline_layout,
+        fill_lookup,
+        sort_lookup,
+        update_start_indices,
     }
 }
