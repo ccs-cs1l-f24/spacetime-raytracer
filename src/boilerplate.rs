@@ -26,6 +26,7 @@ use vulkano::{
     },
     memory::allocator::StandardMemoryAllocator,
     pipeline::graphics::viewport::Viewport,
+    query::{QueryPool, QueryPoolCreateInfo, QueryType},
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass},
     swapchain::{
         FullScreenExclusive, PresentMode, Surface, SurfaceInfo, Swapchain, SwapchainAcquireFuture,
@@ -120,6 +121,8 @@ pub struct BaseGpuState {
     pub queue_family_index: u32,
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
+
+    pub query_pool: Arc<QueryPool>,
 
     pub swapchain_manager: SwapchainManager,
 
@@ -442,11 +445,12 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
     let desired_device_extensions = DeviceExtensions {
         khr_acceleration_structure: true,
         khr_ray_query: true,
-        khr_ray_tracing_pipeline: true,
+        // khr_ray_tracing_pipeline: true,
         ..DeviceExtensions::empty()
     };
     let necessary_device_extensions = DeviceExtensions {
         khr_swapchain: true,
+        ext_host_query_reset: true,
         ..DeviceExtensions::empty()
     };
     let physical_devices = instance
@@ -476,6 +480,7 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
                     .queue_flags
                     .contains(QueueFlags::GRAPHICS | QueueFlags::COMPUTE | QueueFlags::TRANSFER)
                     && p_d.surface_support(*index as u32, &surface).unwrap()
+                    && p_d.properties().timestamp_compute_and_graphics
             })?;
         if !p_d
             .supported_extensions()
@@ -528,7 +533,9 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         };
     let device_features = Features {
         acceleration_structure: device_extensions.khr_acceleration_structure,
+        ray_query: device_extensions.khr_ray_query,
         fill_mode_non_solid: true,
+        host_query_reset: true,
         ..Default::default()
     };
     // if !device_extensions.khr_acceleration_structure {
@@ -555,6 +562,15 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
     )
     .unwrap();
     let queue = queues.next().unwrap(); // just one queue
+
+    let query_pool = QueryPool::new(
+        device.clone(),
+        QueryPoolCreateInfo {
+            query_count: crate::querybank::NUM_QUERIES,
+            ..QueryPoolCreateInfo::query_type(QueryType::Timestamp)
+        },
+    )
+    .unwrap();
 
     let swapchain_manager = SwapchainManager::create(
         device.clone(),
@@ -589,6 +605,7 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         queue_family_index,
         device,
         queue,
+        query_pool,
         swapchain_manager,
         memory_allocator,
         command_buffer_allocator,

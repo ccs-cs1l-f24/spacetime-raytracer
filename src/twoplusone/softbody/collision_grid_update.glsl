@@ -2,16 +2,7 @@
 
 #pragma vscode_glsllint_stage : comp
 
-struct Particle {
-    ivec4 immediate_neighbors;
-    ivec4 diagonal_neighbors;
-    vec2 ground_pos;
-    vec2 ground_vel;
-    float rest_mass;
-    uint object_index;
-    uint _a; // we love padding :)
-    uint _b;
-};
+#include "common.glsl"
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
@@ -48,19 +39,6 @@ layout(push_constant) uniform Settings {
     uint step_index;
 };
 
-// copied from sebastian lague's vid
-// idk if it's actually a good hash function
-// whatever it works for him
-uint hash_cell(ivec2 coord) {
-    uint a = uint(coord.x) * 15823;
-    uint b = uint(coord.y) * 9737333;
-    return a + b;
-}
-
-uint key_from_hash(uint hash) {
-    return hash % num_particles;
-}
-
 // ok actually literally everything here is copied from sebastian lague
 // https://www.youtube.com/watch?v=rSKMYc1CQHE
 // just copying this url everywhere to show my appreciation
@@ -73,8 +51,7 @@ uint key_from_hash(uint hash) {
         if (index >= num_particles) return;
         Particle p = particles[index];
         ivec2 cell_coord = ivec2(floor(p.ground_pos / grid_resolution));
-        uint cell_hash = hash_cell(cell_coord);
-        uint cell_key = key_from_hash(cell_hash);
+        uint cell_key = hash_key_from_cell(cell_coord, num_particles);
         spatial_lookup[index] = uvec2(cell_key, index);
     }
 #endif

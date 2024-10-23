@@ -93,6 +93,7 @@ pub struct Rk4PushConstants {
     immediate_neighbor_dist: f32,
     diagonal_neighbor_dist: f32,
     k: f32,
+    grid_resolution: f32,
 }
 
 #[derive(BufferContents, Debug, Clone)]
@@ -201,8 +202,8 @@ pub struct SoftbodyState {
     spatial_lookup: Subbuffer<[[u32; 2]]>,
     #[allow(unused)]
     start_indices: Subbuffer<[u32]>,
-    collision_update_ds: Arc<PersistentDescriptorSet>,
-    // culling/meshing/render
+    collision_update_ds: Arc<PersistentDescriptorSet>, // also used by the rk4 pipeline
+                                                       // culling/meshing/render
 }
 
 impl SoftbodyState {
@@ -529,6 +530,12 @@ impl SoftbodyState {
     ) -> Box<dyn GpuFuture> {
         let mut cmd_buf = base.create_primary_command_buffer();
         // self.dispatch_euler(pipelines, &mut cmd_buf, debug_cfg);
+        // unsafe {
+        //     cmd_buf.begin_query(base.query_pool.clone(), crate::querybank::QUERY_RK4, Default::default()).unwrap();
+        //     cmd_buf.end_query(base.query_pool.clone(), crate::querybank::QUERY_RK4);
+        //     cmd_buf.copy_query_pool_results(query_pool, queries, destination, flags).unwrap();
+        //     cmd_buf.reset_query_pool(base.query_pool.clone(), 0..crate::querybank::NUM_QUERIES).unwrap();
+        // }
         self.dispatch_rk4(pipelines, &mut cmd_buf, debug_cfg);
         self.dispatch_update_compute_grid(pipelines, &mut cmd_buf);
         vulkano::sync::now(base.device.clone())
@@ -560,6 +567,7 @@ impl SoftbodyState {
                     immediate_neighbor_dist: 0.005,
                     diagonal_neighbor_dist: (0.005f32 * 0.005 + 0.005 * 0.005).sqrt(),
                     k: debug_cfg.k,
+                    grid_resolution: 0.02,
                 },
             )
             .unwrap()
@@ -567,7 +575,11 @@ impl SoftbodyState {
                 PipelineBindPoint::Compute,
                 pipelines.rk4_pipeline_layout.clone(),
                 0,
-                vec![self.euler_ds.clone(), self.object_ds.clone()],
+                vec![
+                    self.euler_ds.clone(),
+                    self.object_ds.clone(),
+                    self.collision_update_ds.clone(),
+                ],
             )
             .unwrap()
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
@@ -594,6 +606,7 @@ impl SoftbodyState {
                     immediate_neighbor_dist: 0.005,
                     diagonal_neighbor_dist: (0.005f32 * 0.005 + 0.005 * 0.005).sqrt(),
                     k: debug_cfg.k,
+                    grid_resolution: 0.02,
                 },
             )
             .unwrap()
@@ -601,7 +614,11 @@ impl SoftbodyState {
                 PipelineBindPoint::Compute,
                 pipelines.rk4_pipeline_layout.clone(),
                 0,
-                vec![self.rk4_0_ds.clone(), self.object_ds.clone()],
+                vec![
+                    self.rk4_0_ds.clone(),
+                    self.object_ds.clone(),
+                    self.collision_update_ds.clone(),
+                ],
             )
             .unwrap()
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
@@ -782,6 +799,24 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         },
     )
     .unwrap();
+    let collision_grid_set_layout = DescriptorSetLayout::new(
+        base.device.clone(),
+        DescriptorSetLayoutCreateInfo {
+            bindings: {
+                let binding = DescriptorSetLayoutBinding {
+                    stages: ShaderStages::COMPUTE,
+                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer)
+                };
+                let mut tree = BTreeMap::new();
+                tree.insert(0, binding.clone());
+                tree.insert(1, binding.clone());
+                tree.insert(2, binding.clone());
+                tree
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
     let rk4_pipeline_layout = PipelineLayout::new(
         base.device.clone(),
         PipelineLayoutCreateInfo {
@@ -790,7 +825,11 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
                 offset: 0,
                 size: size_of::<Rk4PushConstants>() as u32,
             }],
-            set_layouts: vec![rk4_set_layout.clone(), objects_set_layout.clone()],
+            set_layouts: vec![
+                rk4_set_layout.clone(),
+                objects_set_layout.clone(),
+                collision_grid_set_layout.clone(),
+            ],
             ..Default::default()
         },
     )
@@ -996,24 +1035,6 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
                 PipelineShaderStageCreateInfo::new(shader),
                 rk4_pipeline_layout.clone(),
             )
-        },
-    )
-    .unwrap();
-    let collision_grid_set_layout = DescriptorSetLayout::new(
-        base.device.clone(),
-        DescriptorSetLayoutCreateInfo {
-            bindings: {
-                let binding = DescriptorSetLayoutBinding {
-                    stages: ShaderStages::COMPUTE,
-                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer)
-                };
-                let mut tree = BTreeMap::new();
-                tree.insert(0, binding.clone());
-                tree.insert(1, binding.clone());
-                tree.insert(2, binding.clone());
-                tree
-            },
-            ..Default::default()
         },
     )
     .unwrap();
