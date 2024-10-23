@@ -110,6 +110,7 @@ impl winit::application::ApplicationHandler for App {
                     .unwrap(),
             );
             let base_gpu = boilerplate::create_gpu_state(main_window.clone());
+            base_gpu.reset_query_pool(); // for some reason it doesn't start flushed
             log::debug!("Now we have a graphics context and window secured :D"); // many smiles here
             let debug_ui_state = debugui::create_debug_ui_state(event_loop, &base_gpu);
             log::debug!("Debug UI created :D");
@@ -221,6 +222,10 @@ impl winit::application::ApplicationHandler for App {
                             .wait(None)
                             .unwrap();
                     }
+
+                    base_gpu.update_query_results();
+                    println!("{:?}", &base_gpu.query_results_rolling[..4]);
+                    base_gpu.reset_query_pool(); // ALL QUERIES SHOULD GO AFTER HERE
 
                     // scene rendering for this frame
                     // (everything except the debug ui)
