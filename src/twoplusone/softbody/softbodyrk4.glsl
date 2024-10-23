@@ -75,6 +75,8 @@ layout(push_constant) uniform Settings {
     float k;
     // grid info
     float grid_resolution;
+    float collision_repulsion_coefficient;
+    float collision_distance;
 };
 
 // the forces applied to a particle are:
@@ -94,8 +96,8 @@ vec2 get_forces() {
         Particle p = state_particles[spatial_lookup[index++].y];
         if (p.ground_pos == particle.ground_pos) continue;
         vec2 d = particle.ground_pos - p.ground_pos;
-        if (length(d) < 0.005) {
-            forces += normalize(d) * 3000.0 * (0.005 - length(d));
+        if (length(d) < collision_distance) {
+            forces += normalize(d) * collision_repulsion_coefficient * (collision_distance - length(d));
         }
     } while (index < num_particles && spatial_lookup[index].x == spatial_lookup[index + 1].x);
 

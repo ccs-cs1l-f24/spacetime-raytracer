@@ -94,6 +94,8 @@ pub struct Rk4PushConstants {
     diagonal_neighbor_dist: f32,
     k: f32,
     grid_resolution: f32,
+    collision_repulsion_coefficient: f32,
+    collision_distance: f32,
 }
 
 #[derive(BufferContents, Debug, Clone)]
@@ -568,6 +570,8 @@ impl SoftbodyState {
                     diagonal_neighbor_dist: (0.005f32 * 0.005 + 0.005 * 0.005).sqrt(),
                     k: debug_cfg.k,
                     grid_resolution: 0.02,
+                    collision_distance: 0.005,
+                    collision_repulsion_coefficient: 3000.0,
                 },
             )
             .unwrap()
@@ -607,6 +611,8 @@ impl SoftbodyState {
                     diagonal_neighbor_dist: (0.005f32 * 0.005 + 0.005 * 0.005).sqrt(),
                     k: debug_cfg.k,
                     grid_resolution: 0.02,
+                    collision_distance: 0.005,
+                    collision_repulsion_coefficient: 3000.0,
                 },
             )
             .unwrap()
