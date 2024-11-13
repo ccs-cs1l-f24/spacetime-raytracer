@@ -97,6 +97,7 @@ pub struct Rk4PushConstants {
     grid_resolution: f32,
     collision_repulsion_coefficient: f32,
     collision_distance: f32,
+    bond_break_threshold: f32,
 }
 
 #[derive(BufferContents, Debug, Clone)]
@@ -624,6 +625,7 @@ impl SoftbodyState {
                     grid_resolution: 0.02,
                     collision_distance: 0.002,
                     collision_repulsion_coefficient: 68.75,
+                    bond_break_threshold: 0.01,
                 },
             )
             .unwrap()

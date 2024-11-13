@@ -80,6 +80,8 @@ layout(push_constant) uniform Settings {
     float grid_resolution;
     float collision_repulsion_coefficient;
     float collision_distance;
+    // other stuff
+    float bond_break_threshold;
 };
 
 // vec2 get_surface_normal(Particle particle) {
@@ -263,12 +265,11 @@ void propagate_breaking(uint index) {
         force_acc[index] = vec2(0.0);
 
         // break bonds between particles that are too far apart
-        const float THRESHOLD = 0.015;
         Particle p = original_particles[index];
         for (int i = 0; i < 4; i++) {
             if (p.immediate_neighbors[i] != -1) {
                 vec2 d = p.ground_pos - original_particles[p.immediate_neighbors[i]].ground_pos;
-                if (length(d) > THRESHOLD) {
+                if (length(d) > bond_break_threshold) {
                     out_particles[index].immediate_neighbors[i] = -1;
                     int j = i > 1 ? i - 2 : i + 2;
                     out_particles[p.immediate_neighbors[i]].immediate_neighbors[j] = -1;
@@ -278,7 +279,7 @@ void propagate_breaking(uint index) {
         for (int i = 0; i < 4; i++) {
             if (p.diagonal_neighbors[i] != -1) {
                 vec2 d = p.ground_pos - original_particles[p.diagonal_neighbors[i]].ground_pos;
-                if (length(d) > THRESHOLD) {
+                if (length(d) > bond_break_threshold) {
                     out_particles[index].diagonal_neighbors[i] = -1;
                     int j = 3 - i;
                     out_particles[p.diagonal_neighbors[i]].diagonal_neighbors[j] = -1;
