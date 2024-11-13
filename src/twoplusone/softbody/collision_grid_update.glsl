@@ -62,6 +62,8 @@ uint key_from_hash(uint hash) {
 }
 
 // ok actually literally everything here is copied from sebastian lague
+// https://www.youtube.com/watch?v=rSKMYc1CQHE
+// just copying this url everywhere to show my appreciation
 
 // generates a cell key for each particle
 // seeds the spatial lookup with (cell_key, particle_index) pairs
@@ -77,8 +79,6 @@ uint key_from_hash(uint hash) {
     }
 #endif
 
-// sorts the spatial lookup
-// writes the start indices
 #ifdef SORT_LOOKUP
     void main() {
         uint index = gl_GlobalInvocationID.x;
@@ -100,8 +100,10 @@ uint key_from_hash(uint hash) {
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;
         uint key = spatial_lookup[index].x;
-        uint prev_key = index == 0 ? 4294967295 : spatial_lookup[index - 1].x;
-        if (key != prev_key) start_indices[key] = index;
-        else start_indices[key] = 4294967295;
+        if (index == 0) start_indices[key] = 0;
+        else {
+            uint prev_key = spatial_lookup[index - 1].x;
+            if (key != prev_key) start_indices[key] = index;
+        }
     }
 #endif
