@@ -305,7 +305,7 @@ impl winit::application::ApplicationHandler for App {
                     unreachable!("Init state really must exist by now")
                 }
             }
-            // TODO: keyboard & mouse input for the game
+            // TODO: mouse input
             // winit::event::WindowEvent::CursorMoved { device_id, position } => {}
             // winit::event::WindowEvent::MouseInput { state, button, .. } => {}
             winit::event::WindowEvent::KeyboardInput { event, .. } => {

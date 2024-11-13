@@ -1,3 +1,4 @@
+// softbody particle
 struct Particle {
     ivec4 immediate_neighbors;
     ivec4 diagonal_neighbors;
@@ -22,6 +23,7 @@ struct Object {
 // copied from sebastian lague's vid
 // idk if it's actually a good hash function
 // whatever it works for him
+// anyways this hash will index start_indices
 uint hash_key_from_cell(ivec2 coord, uint num_particles) {
     uint a = uint(coord.x) * 15823;
     uint b = uint(coord.y) * 9737333;

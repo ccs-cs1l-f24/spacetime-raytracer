@@ -16,7 +16,6 @@ fn include_callback(
         std::path::PathBuf::new()
             .join("src")
             .join("twoplusone")
-            .join("softbody")
             .join(requested_src),
     )
     .map_err(|e| e.to_string())?;

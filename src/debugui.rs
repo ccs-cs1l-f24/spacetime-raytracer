@@ -18,7 +18,7 @@ impl HotswapConfig {
 
 impl Default for HotswapConfig {
     fn default() -> Self {
-        Self { max_fps: 144 }
+        Self { max_fps: 72 }
     }
 }
 

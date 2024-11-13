@@ -39,7 +39,7 @@ pub mod point_render_nr;
 // but that obviates any need for a fancy spacetime raytracer
 // and doesn't leverage nearly the range of special relativity weirdness
 // that large bodies do
-// so instead we're using soft bodies :D
+// so instead we're using softbodies :D
 //
 // there are many ways to simulate softbodies but basically how we're doing it here
 // is creating 2d voxel/particle meshes at pixel-ish/sub-lightframe resolutions
@@ -53,13 +53,6 @@ pub mod point_render_nr;
 //
 // yes this does mean everything with physics will act somewhere between cloth and jello
 // it'll be delightful :D
-//
-// as to constructing an efficient mesh
-// cull each particle contained by all its neighbors
-// get a tangent by averaging the particle's "surface border" edges, then rotate by 90 degrees
-// do a constrained delaunay triangulation with all the rest
-// (constrain w/surviving edges to prevent concave shapes from convexifying)
-// we'll also have point-based rendering, for debugging purposes
 
 // 64 bytes since glsl auto-pads from 56 to 64
 #[derive(BufferContents, Debug, Clone)]
@@ -106,22 +99,24 @@ pub struct Rk4PushConstants {
 #[derive(BufferContents, Debug, Clone)]
 #[repr(C)]
 pub struct CollisionGridPushConstants {
-    pub num_particles: u32,
-    pub grid_resolution: f32,
-
-    pub group_width: u32,
-    pub group_height: u32,
-    pub step_index: u32,
+    num_particles: u32,
+    grid_resolution: f32,
+    // parameters for bitonic merge sort
+    group_width: u32,
+    group_height: u32,
+    step_index: u32,
 }
 
 // we want resolutions of approximately 1 lightstep (ch where h is simulation tick)
-// let's set an arbitrary resolution of 0.0035 cs per pixel (200 particles per lightsecond)
+// let's set an arbitrary resolution of 0.0035 cs per pixel
 // please only feed this 8-bit depth RGB images cause everything else will fail
 // is BLOCKING ON GPU ACTIONS
 pub fn image_to_softbody<R: std::io::Read>(
     r: R,
     object_index: u32,
     ground_pos_offset: [f32; 2],
+    // TODO: should grid resolution be adjusted to be uniform in object frame rather than ground frame?
+    // i'm thinking no
     starting_ground_vel: [f32; 2],
 ) -> Vec<Particle> {
     let decoder = png::Decoder::new(r);
@@ -539,8 +534,6 @@ impl SoftbodyState {
             .unwrap();
     }
 
-    // TODO maybe add a thing to then copy particle_buf to some other buffer
-    // for both points_norel and the particle culler
     pub fn submit_per_frame_compute(
         &self,
         base: &BaseGpuState,
@@ -624,7 +617,6 @@ impl SoftbodyState {
                 0,
                 Rk4PushConstants {
                     // TODO make these more configurable
-                    // slash always correct
                     num_particles: self.particles.len() as u32,
                     h: 0.005,
                     immediate_neighbor_dist: 0.0035,
