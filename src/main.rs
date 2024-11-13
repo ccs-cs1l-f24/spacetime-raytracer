@@ -104,10 +104,13 @@ impl winit::application::ApplicationHandler for App {
                     .unwrap(),
             );
             let base_gpu = boilerplate::create_gpu_state(main_window.clone());
-            log::debug!("Now we have a graphics context and window secured :D");
+            log::debug!("Now we have a graphics context and window secured :D"); // many smiles here
             let debug_ui_state = debugui::create_debug_ui_state(event_loop, &base_gpu);
+            log::debug!("Debug UI created :D");
             let pipeline_manager = twoplusone::create_pipeline_manager(&base_gpu);
-            let world = twoplusone::create_world(&base_gpu);
+            log::debug!("Pipelines created :D");
+            let world = twoplusone::create_world(&base_gpu, &pipeline_manager);
+            log::debug!("World created :D");
             event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(
                 Instant::now() + debug_ui_state.config.fps_duration(),
             ));

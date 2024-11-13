@@ -20,6 +20,10 @@ use vulkano::{
     },
     shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages},
 };
+use vulkano::{
+    descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet},
+    pipeline::PipelineBindPoint,
+};
 
 use crate::boilerplate::BaseGpuState;
 
@@ -84,11 +88,7 @@ pub struct Object {
 // let's set an arbitrary resolution of 0.005 cs per pixel (200 particles per lightsecond)
 // please only feed this 8-bit depth RGB images cause everything else will fail
 // is BLOCKING ON GPU ACTIONS
-pub fn image_to_softbody<R: std::io::Read>(
-    r: R,
-    base: &BaseGpuState,
-    object_index: u32,
-) -> Vec<Particle> {
+pub fn image_to_softbody<R: std::io::Read>(r: R, object_index: u32) -> Vec<Particle> {
     let decoder = png::Decoder::new(r);
     let mut reader = decoder.read_info().unwrap();
     let mut buf = vec![0; reader.output_buffer_size()];
@@ -160,20 +160,28 @@ pub struct SoftbodyState {
     particle_buf_intermediate2: Subbuffer<[Particle]>,
     forcesum: Subbuffer<[f32]>,
 
+    euler_ds: Arc<PersistentDescriptorSet>,
+    // rk4_0_ds: PersistentDescriptorSet,
+    // rk4_1_ds: PersistentDescriptorSet,
+    // rk4_2_ds: PersistentDescriptorSet,
+    // rk4_3_ds: PersistentDescriptorSet,
+    // rk4_4_ds: PersistentDescriptorSet,
+
     // objects
     object_staging: Subbuffer<[Object]>,
     object_buf: Subbuffer<[Object]>,
+
+    object_ds: Arc<PersistentDescriptorSet>,
     // collision
 
     // culling/meshing/render
 }
 
-// all of the functions defined here block on their gpu ops
 impl SoftbodyState {
     // (how much should be allocated)
     const MAX_OBJECTS: u64 = 8192; // 2^16 bytes
     const MAX_PARTICLES: u64 = 1 << 20;
-    pub fn create(base: &BaseGpuState) -> Self {
+    pub fn create(base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) -> Self {
         let particle_staging = Buffer::new_slice::<Particle>(
             base.memory_allocator.clone(),
             BufferCreateInfo {
@@ -242,6 +250,18 @@ impl SoftbodyState {
             Self::MAX_PARTICLES,
         )
         .unwrap();
+        let euler_ds = PersistentDescriptorSet::new(
+            &base.descriptor_set_allocator,
+            pipelines.rk4_set_layout.clone(),
+            [
+                WriteDescriptorSet::buffer(0, particle_buf.clone()),
+                WriteDescriptorSet::buffer(1, particle_buf.clone()),
+                WriteDescriptorSet::buffer(2, particle_buf_intermediate1.clone()),
+                WriteDescriptorSet::buffer(3, forcesum.clone()),
+            ],
+            [],
+        )
+        .unwrap();
         let object_staging = Buffer::new_slice::<Object>(
             base.memory_allocator.clone(),
             BufferCreateInfo {
@@ -259,14 +279,21 @@ impl SoftbodyState {
         let object_buf = Buffer::new_slice::<Object>(
             base.memory_allocator.clone(),
             BufferCreateInfo {
-                usage: BufferUsage::TRANSFER_DST | BufferUsage::STORAGE_BUFFER,
+                usage: BufferUsage::TRANSFER_DST | BufferUsage::UNIFORM_BUFFER,
                 ..Default::default()
             },
             AllocationCreateInfo {
                 memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
                 ..Default::default()
             },
-            Self::MAX_PARTICLES,
+            Self::MAX_OBJECTS,
+        )
+        .unwrap();
+        let object_ds = PersistentDescriptorSet::new(
+            &base.descriptor_set_allocator,
+            pipelines.objects_set_layout.clone(),
+            [WriteDescriptorSet::buffer(0, object_buf.clone())],
+            [],
         )
         .unwrap();
         Self {
@@ -277,10 +304,14 @@ impl SoftbodyState {
             particle_buf_intermediate1,
             particle_buf_intermediate2,
             forcesum,
+            euler_ds,
             object_staging,
             object_buf,
+            object_ds,
         }
     }
+
+    // BLOCKS on gpu upload
     pub fn push(&self, base: &BaseGpuState) {
         let particle_staging_ptr =
             self.particle_staging.mapped_slice().unwrap().as_ptr() as *mut Particle;
@@ -340,7 +371,26 @@ impl SoftbodyState {
     }
 
     pub fn dispatch_euler(&self, base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) {
-        //
+        let mut cbuf_builder = base.create_primary_command_buffer();
+        cbuf_builder
+            .bind_pipeline_compute(pipelines.euler.clone())
+            .unwrap()
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                pipelines.pipeline_layout.clone(),
+                0,
+                vec![self.euler_ds.clone(), self.object_ds.clone()],
+            )
+            .unwrap();
+        cbuf_builder.dispatch([(self.particles.len() as u32).div_ceil(256), 0, 0]).unwrap();
+        let cbuf = cbuf_builder.build().unwrap();
+        // vulkano::sync::now(base.device.clone())
+        //     .then_execute(base.queue.clone(), cbuf)
+        //     .unwrap()
+        //     .then_signal_fence_and_flush()
+        //     .unwrap()
+        //     .wait(None)
+        //     .unwrap();
     }
     pub fn dispatch_rk4(&self, base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) {
         todo!()
@@ -354,6 +404,7 @@ impl SoftbodyState {
 
     // there should be exactly as many particles in self.particles as in the gpu buffer
     // (no new particles are being created, hopefully)
+    // BLOCKS on gpu download
     pub fn pull(&mut self, base: &BaseGpuState) {
         let mut cbuf_builder = base.create_primary_command_buffer();
         cbuf_builder
