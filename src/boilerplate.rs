@@ -440,7 +440,6 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
 
     // device selection
     let desired_device_extensions = DeviceExtensions {
-        khr_swapchain: true,
         khr_acceleration_structure: true,
         khr_ray_query: true,
         khr_ray_tracing_pipeline: true,
@@ -561,8 +560,7 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         device.clone(),
         surface.clone(),
         window.inner_size().into(),
-        // TODO increase this number
-        1, //cfg.base.desired_frames_in_flight,
+        2, //cfg.base.desired_frames_in_flight,
     );
 
     let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
