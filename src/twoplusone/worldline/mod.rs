@@ -9,6 +9,13 @@ pub struct SoftbodyWorldlines {
     //
 }
 
+pub struct UpdateSoftbodiesPushConstants {
+    num_particles: u32,
+    grid_resolution: f32,
+    radius: f32,
+    epsilon: f32,
+}
+
 // a 3d model, a triangle mesh shell wrapping around the spacetime
 // that is consumed by a SINGLE aloofbody
 pub struct AloofbodyWorldline {

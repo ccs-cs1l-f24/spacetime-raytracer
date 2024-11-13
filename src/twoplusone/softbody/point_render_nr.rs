@@ -147,14 +147,24 @@ pub fn create_point_render_pipelines(base: &mut BaseGpuState) -> PointRenderPipe
         .collect(),
         vertex_input_state: Some(
             VertexInputState::new()
-                .attributes([(
-                    0,
-                    VertexInputAttributeDescription {
-                        binding: 0,
-                        format: Format::R32G32_SFLOAT,
-                        offset: 32, // offset 32 bytes into super::softbody::Particle to get ground_pos
-                    },
-                )])
+                .attributes([
+                    (
+                        0,
+                        VertexInputAttributeDescription {
+                            binding: 0,
+                            format: Format::R32G32_SFLOAT,
+                            offset: 32, // offset 32 bytes into super::softbody::Particle to get ground_pos
+                        },
+                    ),
+                    (
+                        1,
+                        VertexInputAttributeDescription {
+                            binding: 0,
+                            format: Format::R32_UINT,
+                            offset: 52, // offset 52 bytes to get object_index
+                        },
+                    ),
+                ])
                 .bindings([(
                     0,
                     VertexInputBindingDescription {

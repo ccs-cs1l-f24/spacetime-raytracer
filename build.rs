@@ -5,25 +5,6 @@ use std::{
     str::FromStr,
 };
 
-fn include_callback(
-    requested_src: &str,
-    _: shaderc::IncludeType,
-    _: &str,
-    _: usize,
-) -> Result<shaderc::ResolvedInclude, String> {
-    let content = std::fs::read_to_string(
-        std::path::PathBuf::new()
-            .join("src")
-            .join("twoplusone")
-            .join(requested_src),
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(shaderc::ResolvedInclude {
-        content,
-        resolved_name: requested_src.to_string(),
-    })
-}
-
 const SHADER_PATHS: &[(&str, &[&str])] = &[
     (
         "src/twoplusone/softbody/collision_grid_update",
@@ -50,9 +31,31 @@ const SHADER_PATHS: &[(&str, &[&str])] = &[
         ],
     ),
     // ("src/twoplusone/worldline/raytrace", &[""]),
-    ("src/twoplusone/worldline/worldline_updatesoftbodies", &["_"]),
+    (
+        "src/twoplusone/worldline/worldline_updatesoftbodies",
+        &["IDENTIFY_BOUNDARY"],
+    ),
     // ("src/twoplusone/worldline/worldline3d", &[""]),
 ];
+
+fn include_callback(
+    requested_src: &str,
+    _: shaderc::IncludeType,
+    _: &str,
+    _: usize,
+) -> Result<shaderc::ResolvedInclude, String> {
+    let content = std::fs::read_to_string(
+        std::path::PathBuf::new()
+            .join("src")
+            .join("twoplusone")
+            .join(requested_src),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(shaderc::ResolvedInclude {
+        content,
+        resolved_name: requested_src.to_string(),
+    })
+}
 
 fn spv_path(base: &PathBuf, comp: &str) -> PathBuf {
     let mut prev = base.clone();

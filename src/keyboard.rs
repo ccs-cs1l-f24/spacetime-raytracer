@@ -33,7 +33,11 @@ impl Keyboard {
                 "d" => self.right = state,
                 "z" => self.z = state,
                 "x" => self.x = state,
-                "p" => if state { self.pause = !self.pause },
+                "p" => {
+                    if state {
+                        self.pause = !self.pause
+                    }
+                }
                 _ => {}
             }
         }

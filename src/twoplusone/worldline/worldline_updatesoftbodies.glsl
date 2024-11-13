@@ -15,7 +15,10 @@
 
 struct WorldlineVertex {
     vec3 pos; // (x, y, t)
-    uint object_index; // (treated as flat in the vertex shaders)
+    // (these are treated as flat in the vertex shaders)
+    uint object_index; //
+    uint particle_index;
+    uint direction; // 0/1/2/3 is left/right/top/bottom
 };
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
@@ -28,16 +31,23 @@ layout(set = 0, binding = 1) readonly buffer P2 {
     Particle curr_particles[];
 };
 
-layout(set = 1, binding = 0) buffer Allocation {
-    uint allocated_space[];
+layout(set = 0, binding = 2) buffer SpatialLookup {
+    // cell hash, particle index (sorted by cell hash)
+    // one per particle
+    uvec2 spatial_lookup[];
+};
+layout(set = 0, binding = 3) buffer StartIndices {
+    // cell hash => where associated particle indices start in spatial_lookup
+    // one per particle
+    uint start_indices[];
 };
 
-layout(set = 2, binding = 0) writeonly buffer O1 {
+layout(set = 1, binding = 0) writeonly buffer O1 {
     // for only this most recent layer of the model
     WorldlineVertex out_vertices[];
 };
 
-layout(set = 2, binding = 0) writeonly buffer O2 {
+layout(set = 1, binding = 0) writeonly buffer O2 {
     // 0 starts at the prev_particles layer of worldline
     // num_particles starts at curr_particles
     uint out_indices[];
@@ -45,85 +55,53 @@ layout(set = 2, binding = 0) writeonly buffer O2 {
 
 layout(push_constant) uniform Settings {
     uint num_particles;
+    float grid_resolution;
+    float radius;
+    float epsilon;
 };
 
-// // if none of a particle's neighbors are connected to each other, we have a line
-// // which is to say, no way to define an inside and outside for this particle
-// bool is_line() {
-//     if (p.immediate_neighbors[0] != -1 && p.diagonal_neighbors[0] != -1) { // left to top left
-//         Particle left = original_particles[p.immediate_neighbors[0]];
-//         if (left.immediate_neighbors[1] == p.diagonal_neighbors[0])
-//             return false;
-//     }
-//     if (p.diagonal_neighbors[0] != -1 && p.immediate_neighbors[1] != -1) { // top left to top
-//         Particle tl = original_particles[p.diagonal_neighbors[0]];
-//         if (tl.immediate_neighbors[2] == p.immediate_neighbors[1])
-//             return false;
-//     }
-//     if (p.immediate_neighbors[1] != -1 && p.diagonal_neighbors[1] != -1) { // top to top right
-//         Particle top = original_particles[p.immediate_neighbors[1]];
-//         if (top.immediate_neighbors[2] == p.diagonal_neighbors[1])
-//             return false;
-//      }
-//     if (p.diagonal_neighbors[1] != -1 && p.immediate_neighbors[2] != -1) { // top right to right
-//         Particle tr = original_particles[p.diagonal_neighbors[1]];
-//         if (tr.immediate_neighbors[3] == p.immediate_neighbors[2])
-//             return false;
-//     }
-//     if (p.immediate_neighbors[2] != -1 && p.diagonal_neighbors[3] != -1) { // right to bottom right
-//         Particle right = original_particles[p.immediate_neighbors[2]];
-//         if (right.immediate_neighbors[3] == p.diagonal_neighbors[3])
-//             return false;
-//     }
-//     if (p.diagonal_neighbors[3] != -1 && p.immediate_neighbors[3] != -1) { // bottom right to bottom
-//         Particle br = original_particles[p.diagonal_neighbors[3]];
-//         if (br.immediate_neighbors[0] == p.immediate_neighbors[3])
-//             return false;
-//     }
-//     if (p.immediate_neighbors[3] != -1 && p.diagonal_neighbors[2] != -1) { // bottom to bottom left
-//         Particle bottom = original_particles[p.immediate_neighbors[3]];
-//         if (bottom.immediate_neighbors[0] == p.diagonal_neighbors[2])
-//             return false;
-//     }
-//     if (p.diagonal_neighbors[2] != -1 && p.immediate_neighbors[0] != -1) { // bottom left to left
-//         Particle br = original_particles[p.diagonal_neighbors[2]];
-//         if (br.immediate_neighbors[1] == p.immediate_neighbors[0])
-//             return false;
-//     }
-//     return true;
-// }
+// for each particle, sample 4 points in each cardinal direction radius+epsilon distance from its center
+// if such a sampled point is not in the radius of any nearby particles *of the same object*
+// then it's part of an object boundary :D
+// connect each particle to the closest 2 particles *of the same object*
 
-// TODO
-// check the 4 potential triangles adjacent each edge considered
-// if at least one on each side no need to render the edge
-// if one on one side none on the other then render the edge
-// if neither then don't render the edge but flag that one or more of the particles involved may need to be rendered special case-y
+#ifdef IDENTIFY_BOUNDARY
+    void main() {
+        uint index = gl_GlobalInvocationID.x;
 
-// TODO alternative approach
-// go on a per-occupied-grid-square basis
-// SDF all the particles nearby this one
-// if the SDF doesn't cover this entire grid square
-// then add the grid square to the mesh?
+        Particle particle = curr_particles[index];
 
-void main() {
-    uint index = gl_GlobalInvocationID.x;
+        // plot 4 points just outside the "area of effect" of this particle
+        // in a little diamond around the particle
+        vec2 p1 = particle.ground_pos - vec2(radius + epsilon, 0.0); // left
+        vec2 p2 = particle.ground_pos + vec2(radius + epsilon, 0.0); // right
+        vec2 p3 = particle.ground_pos - vec2(0.0, radius + epsilon); // top
+        vec2 p4 = particle.ground_pos + vec2(0.0, radius + epsilon); // bottom
 
-    Particle particle = curr_particles[index];
+        bool i1, i2, i3, i4 = true;
 
-    if (particle.immediate_neighbors[0] != -1 &&
-        particle.immediate_neighbors[1] != -1 &&
-        particle.immediate_neighbors[2] != -1 &&
-        particle.immediate_neighbors[3] != -1 && 
-        particle.diagonal_neighbors[0] != -1 &&
-        particle.diagonal_neighbors[1] != -1 &&
-        particle.diagonal_neighbors[2] != -1 &&
-        particle.diagonal_neighbors[3] != -1
-    ) {
-        // if you're in the middle of an object, no need to do anything
-        return;
+        ivec2 cell_coord = ivec2(floor(particle.ground_pos / grid_resolution));
+        for (int i = 0; i < 9; i++) { // 0 to 8 (inclusive) --- i=4 is 0,0
+            index = start_indices[hash_key_from_cell(cell_coord + ivec2((i % 3) - 1, (i / 3) - 1), num_particles)];
+            if (index == 4294967295) continue; // no particles at that grid cell
+            do {
+                Particle other = curr_particles[spatial_lookup[index++].y];
+                // ignore yourself
+                if (other.ground_pos == particle.ground_pos) continue;
+                // ignore particles that aren't from your same object
+                if (other.object_index != particle.object_index) continue;
+                // are any of the 4 points contained in another particle's radius
+                if (distance(p1, other.ground_pos) < radius) i1 = false;
+                if (distance(p2, other.ground_pos) < radius) i2 = false;
+                if (distance(p3, other.ground_pos) < radius) i3 = false;
+                if (distance(p4, other.ground_pos) < radius) i4 = false;
+            } while (index < num_particles && spatial_lookup[index].x == spatial_lookup[index + 1].x);
+        }
     }
+#endif
 
-    // plot 4 points just outside the "area of effect" of this particle
-    // TODO
-}
- 
+#ifdef BOUNDARY_CONNECT
+    void main() {
+        uint index = gl_GlobalInvocationID.x;
+    }
+#endif

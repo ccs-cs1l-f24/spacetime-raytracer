@@ -9,6 +9,9 @@
     // with appropriate stride and offset
     // keeps it simple :)
     layout(location = 0) in vec2 pos;
+    layout(location = 1) in uint object_index;
+
+    layout(location = 0) out flat uint out_object_index;
 
     // we can use the rest_mass parameter of the particles
     // to indicate whether it's been culled
@@ -24,6 +27,7 @@
         // gl_Position = vec4(float(gl_VertexIndex)/10.0, 0.0, 0.0, 1.0);
         gl_Position = vec4(worldspace_to_screenspace * (pos - camera_position), 0.0, 1.0);
         gl_PointSize = 1.0;
+        out_object_index = object_index;
     }
 
 #endif
@@ -33,10 +37,16 @@
     #pragma vscode_glsllint_stage : frag
     #pragma shader_stage(fragment)
 
+    layout(location = 0) in flat uint object_index;
+
     layout(location = 0) out vec4 out_color;
 
     void main() {
-        out_color = vec4(0.0, 0.0, 1.0, 1.0);
+        // temporary, for debug purposes
+        if (object_index == 0)
+            out_color = vec4(0.0, 0.0, 1.0, 1.0);
+        else
+            out_color = vec4(1.0, 0.0, 0.0, 1.0);
     }
 
 #endif
