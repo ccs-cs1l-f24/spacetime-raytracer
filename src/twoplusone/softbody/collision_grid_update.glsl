@@ -72,9 +72,6 @@ layout(push_constant) uniform Settings {
     }
 #endif
 
-// TODO reset all start_indices values to MAX_VALUE
-// so that cell hashes without any particles can be identified consistently
-
 #ifdef UPDATE_START_INDICES_1
     void main() {
         uint index = gl_GlobalInvocationID.x;
@@ -84,8 +81,7 @@ layout(push_constant) uniform Settings {
         start_indices[index] = 4294967295;
     }
 #endif
-
-#ifdef UPDATE_START_INDICES
+#ifdef UPDATE_START_INDICES_2
     void main() {
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;

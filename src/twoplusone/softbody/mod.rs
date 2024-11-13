@@ -746,7 +746,7 @@ impl SoftbodyState {
             .unwrap()
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
             .unwrap()
-            .bind_pipeline_compute(pipelines.update_start_indices.clone())
+            .bind_pipeline_compute(pipelines.update_start_indices_2.clone())
             .unwrap()
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
             .unwrap();
@@ -784,7 +784,7 @@ pub struct SoftbodyComputePipelines {
     fill_lookup: Arc<ComputePipeline>,
     sort_lookup: Arc<ComputePipeline>,
     update_start_indices_1: Arc<ComputePipeline>,
-    update_start_indices: Arc<ComputePipeline>,
+    update_start_indices_2: Arc<ComputePipeline>,
 }
 
 pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyComputePipelines {
@@ -1182,13 +1182,13 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
     let mut opts = shaderc::CompileOptions::new().unwrap();
     opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("UPDATE_START_INDICES", None);
+    opts.add_macro_definition("UPDATE_START_INDICES_2", None);
     let shader = base
         .shader_loader
         .compile_into_spirv(
             include_str!("collision_grid_update.glsl"),
             shaderc::ShaderKind::DefaultCompute,
-            "update_start_indices",
+            "update_start_indices_2",
             "main",
             Some(&opts),
         )
@@ -1202,7 +1202,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     }
     .entry_point("main")
     .unwrap();
-    let update_start_indices = ComputePipeline::new(
+    let update_start_indices_2 = ComputePipeline::new(
         base.device.clone(),
         None,
         ComputePipelineCreateInfo {
@@ -1230,6 +1230,6 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         fill_lookup,
         sort_lookup,
         update_start_indices_1,
-        update_start_indices,
+        update_start_indices_2,
     }
 }
