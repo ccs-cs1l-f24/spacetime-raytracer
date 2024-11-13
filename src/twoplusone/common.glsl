@@ -1,7 +1,7 @@
 // softbody particle
 struct Particle {
-    ivec4 immediate_neighbors;
-    ivec4 diagonal_neighbors;
+    ivec4 immediate_neighbors; // left/up/right/down
+    ivec4 diagonal_neighbors;  // tl/tr/bl/br
     vec2 ground_pos;
     vec2 ground_vel;
     float rest_mass;

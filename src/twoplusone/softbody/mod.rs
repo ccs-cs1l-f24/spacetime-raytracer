@@ -622,9 +622,9 @@ impl SoftbodyState {
                     immediate_neighbor_dist: 0.0035,
                     diagonal_neighbor_dist: (0.0035f32 * 0.0035 + 0.0035 * 0.0035).sqrt(),
                     k: 12500.0,
-                    grid_resolution: 0.02,
+                    grid_resolution: 0.0075,
                     collision_distance: 0.002,
-                    collision_repulsion_coefficient: 68.75,
+                    collision_repulsion_coefficient: 100.0,
                     bond_break_threshold: 0.01,
                 },
             )
@@ -697,7 +697,7 @@ impl SoftbodyState {
     ) {
         let pcs = CollisionGridPushConstants {
             num_particles: self.particles.len() as u32,
-            grid_resolution: 0.02,
+            grid_resolution: 0.0075,
             group_width: 0,
             group_height: 0,
             step_index: 0,
@@ -742,6 +742,10 @@ impl SoftbodyState {
             }
         }
         cmd_buf
+            .bind_pipeline_compute(pipelines.update_start_indices_1.clone())
+            .unwrap()
+            .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
+            .unwrap()
             .bind_pipeline_compute(pipelines.update_start_indices.clone())
             .unwrap()
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
@@ -779,6 +783,7 @@ pub struct SoftbodyComputePipelines {
     collision_pipeline_layout: Arc<PipelineLayout>,
     fill_lookup: Arc<ComputePipeline>,
     sort_lookup: Arc<ComputePipeline>,
+    update_start_indices_1: Arc<ComputePipeline>,
     update_start_indices: Arc<ComputePipeline>,
 }
 
@@ -1143,6 +1148,40 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
 
     let mut opts = shaderc::CompileOptions::new().unwrap();
     opts.set_include_callback(super::include_callback);
+    opts.add_macro_definition("UPDATE_START_INDICES_1", None);
+    let shader = base
+        .shader_loader
+        .compile_into_spirv(
+            include_str!("collision_grid_update.glsl"),
+            shaderc::ShaderKind::DefaultCompute,
+            "update_start_indices_1",
+            "main",
+            Some(&opts),
+        )
+        .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(shader.as_binary()),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let update_start_indices_1 = ComputePipeline::new(
+        base.device.clone(),
+        None,
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                collision_pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
+    let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.set_include_callback(super::include_callback);
     opts.add_macro_definition("UPDATE_START_INDICES", None);
     let shader = base
         .shader_loader
@@ -1190,6 +1229,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         collision_pipeline_layout,
         fill_lookup,
         sort_lookup,
+        update_start_indices_1,
         update_start_indices,
     }
 }

@@ -102,46 +102,42 @@ vec2 get_forces() {
     Object obj = objects[particle.object_index];
 
     vec2 forces = vec2(0.0, 0.0); // we accumulate forces here
-    if (particle.immediate_neighbors[0] == -1 &&
-        particle.immediate_neighbors[1] == -1 &&
-        particle.immediate_neighbors[2] == -1 &&
-        particle.immediate_neighbors[3] == -1 && 
-        particle.diagonal_neighbors[0] == -1 &&
-        particle.diagonal_neighbors[1] == -1 &&
-        particle.diagonal_neighbors[2] == -1 &&
-        particle.diagonal_neighbors[3] == -1) return vec2(0.0);
 
     // particle-particle collisions
     ivec2 cell_coord = ivec2(floor(particle.ground_pos / grid_resolution));
-    uint index = start_indices[hash_key_from_cell(cell_coord, num_particles)];
-    do {
-        // // no colliding when you're fully inside the softbody!
-        // // NEVERMIND we actually want that
-        // if (particle.immediate_neighbors[0] != -1 &&
-        //     particle.immediate_neighbors[1] != -1 &&
-        //     particle.immediate_neighbors[2] != -1 &&
-        //     particle.immediate_neighbors[3] != -1 && 
-        //     particle.diagonal_neighbors[0] != -1 &&
-        //     particle.diagonal_neighbors[1] != -1 &&
-        //     particle.diagonal_neighbors[2] != -1 &&
-        //     particle.diagonal_neighbors[3] != -1) break;
-        Particle p2 = state_particles[spatial_lookup[index++].y];
-        // no colliding with your neighbors!
-        if (particle.immediate_neighbors[0] == index - 1 ||
-            particle.immediate_neighbors[1] == index - 1 ||
-            particle.immediate_neighbors[2] == index - 1 ||
-            particle.immediate_neighbors[3] == index - 1 || 
-            particle.diagonal_neighbors[0] == index - 1 ||
-            particle.diagonal_neighbors[1] == index - 1 ||
-            particle.diagonal_neighbors[2] == index - 1 ||
-            particle.diagonal_neighbors[3] == index - 1) continue;
-        // no colliding with yourself!
-        if (p2.ground_pos == particle.ground_pos) continue;
-        vec2 d = particle.ground_pos - p2.ground_pos;
-        if (length(d) < collision_distance) {
-            forces += normalize(d) * collision_repulsion_coefficient;
-        }
-    } while (index < num_particles && spatial_lookup[index].x == spatial_lookup[index + 1].x);
+    uint index;
+    for (int i = 0; i < 9; i++) { // 0 to 8 (inclusive) --- i=4 is 0,0
+        index = start_indices[hash_key_from_cell(cell_coord + ivec2((i % 3) - 1, (i / 3) - 1), num_particles)];
+        if (index == 4294967295) continue; // no particles at that grid cell
+        do {
+            // // no colliding when you're fully inside the softbody!
+            // // NEVERMIND we actually want that
+            // if (particle.immediate_neighbors[0] != -1 &&
+            //     particle.immediate_neighbors[1] != -1 &&
+            //     particle.immediate_neighbors[2] != -1 &&
+            //     particle.immediate_neighbors[3] != -1 && 
+            //     particle.diagonal_neighbors[0] != -1 &&
+            //     particle.diagonal_neighbors[1] != -1 &&
+            //     particle.diagonal_neighbors[2] != -1 &&
+            //     particle.diagonal_neighbors[3] != -1) break;
+            Particle p2 = state_particles[spatial_lookup[index++].y];
+            // no colliding with yourself!
+            if (p2.ground_pos == particle.ground_pos) continue;
+            // no colliding with your neighbors!
+            if (particle.immediate_neighbors[0] == index - 1 ||
+                particle.immediate_neighbors[1] == index - 1 ||
+                particle.immediate_neighbors[2] == index - 1 ||
+                particle.immediate_neighbors[3] == index - 1 || 
+                particle.diagonal_neighbors[0] == index - 1 ||
+                particle.diagonal_neighbors[1] == index - 1 ||
+                particle.diagonal_neighbors[2] == index - 1 ||
+                particle.diagonal_neighbors[3] == index - 1) continue;
+            vec2 d = particle.ground_pos - p2.ground_pos;
+            if (length(d) < collision_distance) {
+                forces += normalize(d) * collision_repulsion_coefficient;
+            }
+        } while (index < num_particles && spatial_lookup[index].x == spatial_lookup[index + 1].x);
+    }
 
     // springs adhering the object together
     // ideally the spring grid is fine enough that each |d| is at most 1 lightframe
@@ -168,10 +164,6 @@ vec2 get_forces() {
             forces += -k * (length(d) - diagonal_neighbor_dist) * normalize(d);
         }
     }
-    // temporary
-    // if (particle.ground_pos.x < 0.2) {
-    //     forces += vec2(1.0, 0.0);
-    // }
 
     return forces;
 }
@@ -276,8 +268,6 @@ void propagate_breaking(uint index) {
                     out_particles[p.immediate_neighbors[i] + obj.offset].immediate_neighbors[j] = -1;
                 }
             }
-        }
-        for (int i = 0; i < 4; i++) {
             if (p.diagonal_neighbors[i] != -1) {
                 vec2 d = p.ground_pos - original_particles[p.diagonal_neighbors[i] + obj.offset].ground_pos;
                 if (length(d) > bond_break_threshold) {
