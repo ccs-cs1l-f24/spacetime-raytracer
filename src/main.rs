@@ -132,6 +132,16 @@ impl winit::application::ApplicationHandler for App {
             log::debug!("Pipelines created :D");
             let world = twoplusone::create_world(&base_gpu, &pipeline_manager);
             log::debug!("World created :D");
+            // initializing things :D
+            use vulkano::sync::GpuFuture;
+            world
+                .softbody_state // this way the first physics frame isn't working from an uninitialized cgrid (SLOW)
+                .submit_initialize_cgrid(&base_gpu, &pipeline_manager.softbody_compute)
+                .then_signal_fence_and_flush()
+                .unwrap()
+                .wait(None)
+                .unwrap();
+
             event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(Instant::now()));
             let init_state = InitState {
                 main_window,

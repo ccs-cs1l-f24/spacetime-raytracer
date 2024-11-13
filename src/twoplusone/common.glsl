@@ -20,6 +20,12 @@ struct Object {
     uint _b;
 };
 
+// 16 bytes
+struct WorldlineVertex {
+    vec3 pos;
+    uint object_index;
+};
+
 // copied from sebastian lague's vid
 // idk if it's actually a good hash function
 // whatever it works for him

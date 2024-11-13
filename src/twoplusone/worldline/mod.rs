@@ -1,6 +1,20 @@
-use std::sync::Arc;
+use std::{borrow::Borrow, collections::BTreeMap, sync::Arc};
 
-use vulkano::{buffer::BufferContents, pipeline::ComputePipeline};
+use vulkano::{
+    buffer::BufferContents,
+    descriptor_set::layout::{
+        DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
+        DescriptorType,
+    },
+    pipeline::{
+        compute::ComputePipelineCreateInfo,
+        layout::{PipelineLayoutCreateInfo, PushConstantRange},
+        ComputePipeline, PipelineLayout, PipelineShaderStageCreateInfo,
+    },
+    shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages},
+};
+
+use crate::boilerplate::BaseGpuState;
 
 // ALOOFBODIES
 // =============
@@ -27,15 +41,113 @@ pub struct UpdateSoftbodiesPushConstants {
     num_particles: u32,
     grid_resolution: f32,
     radius: f32,
+    time: f32,
+    edge_map_capacity: u32,
 }
 
 #[derive(BufferContents, Debug, Clone)]
 #[repr(C)]
-pub struct WorldlineVertex {
+pub struct IntermediateSoftbodyWorldlineVertex {
     pub ground_pos: [f32; 3],
     pub object_index: u32,
+    pub packed_id: u32,
+    pub sibling_1_id: i32,
+    pub sibling_2_id: i32,
+    pub flag: i32,
+}
+
+pub struct UpdateSoftbodiesState {
+    //
 }
 
 pub struct UpdateSoftbodiesComputePipelines {
-    identify_boundary: Arc<ComputePipeline>,
+    particles_set_layout: Arc<DescriptorSetLayout>,
+    vertices_set_layout: Arc<DescriptorSetLayout>,
+
+    identify_vertices: Arc<ComputePipeline>,
+    // generate_compare_register_edges: Arc<ComputePipeline>,
+    // mesh_edges: Arc<ComputePipeline>,
+}
+
+pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComputePipelines {
+    base.register_cache("identify_vertices");
+    let particles_set_layout = DescriptorSetLayout::new(
+        base.device.clone(),
+        DescriptorSetLayoutCreateInfo {
+            bindings: {
+                let binding = DescriptorSetLayoutBinding {
+                    stages: ShaderStages::COMPUTE,
+                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer)
+                };
+                let mut tree = BTreeMap::new();
+                tree.insert(0, binding.clone());
+                tree.insert(1, binding.clone());
+                tree.insert(2, binding.clone());
+                tree
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let vertices_set_layout = DescriptorSetLayout::new(
+        base.device.clone(),
+        DescriptorSetLayoutCreateInfo {
+            bindings: {
+                let binding = DescriptorSetLayoutBinding {
+                    stages: ShaderStages::COMPUTE,
+                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer)
+                };
+                let mut tree = BTreeMap::new();
+                tree.insert(0, binding.clone());
+                tree
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let pipeline_layout = PipelineLayout::new(
+        base.device.clone(),
+        PipelineLayoutCreateInfo {
+            push_constant_ranges: vec![PushConstantRange {
+                stages: ShaderStages::COMPUTE,
+                offset: 0,
+                size: size_of::<UpdateSoftbodiesPushConstants>() as u32,
+            }],
+            set_layouts: vec![particles_set_layout.clone(), vertices_set_layout.clone()],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/worldline_updatesoftbodies_IDENTIFY_VERTICES.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let identify_vertices = ComputePipeline::new(
+        base.device.clone(),
+        Some(base.get_cache("identify_vertices")),
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
+    UpdateSoftbodiesComputePipelines {
+        particles_set_layout,
+        vertices_set_layout,
+        identify_vertices,
+    }
 }

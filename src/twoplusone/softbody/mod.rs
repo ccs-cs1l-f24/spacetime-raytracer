@@ -1,7 +1,10 @@
 use std::{
     borrow::Borrow,
     collections::{BTreeMap, HashMap},
-    sync::{atomic::{AtomicU32, Ordering}, Arc},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
 };
 
 use smallvec::SmallVec;
@@ -533,6 +536,22 @@ impl SoftbodyState {
             .unwrap();
     }
 
+    // should only be used at initialization
+    // (or some other event that requires premature refresh of the collision grid)
+    pub fn submit_initialize_cgrid(
+        &self,
+        base: &BaseGpuState,
+        pipelines: &SoftbodyComputePipelines,
+    ) -> Box<dyn GpuFuture> {
+        let mut cmd_buf = base.create_primary_command_buffer();
+        self.dispatch_update_compute_grid(pipelines, &mut cmd_buf);
+        vulkano::sync::now(base.device.clone())
+            .then_execute(base.queue.clone(), cmd_buf.build().unwrap())
+            .unwrap()
+            .boxed()
+    }
+
+    // does rk4 then update compute grid in one cbuf
     pub fn submit_per_frame_compute(
         &self,
         base: &BaseGpuState,
@@ -548,22 +567,22 @@ impl SoftbodyState {
                 )
                 .unwrap();
         }
-        self.dispatch_update_compute_grid(pipelines, &mut cmd_buf);
-        unsafe {
-            cmd_buf
-                .write_timestamp(
-                    base.query_pool.clone(),
-                    crate::querybank::GRID_UPDATE_AFTER,
-                    PipelineStage::AllCommands,
-                )
-                .unwrap();
-        }
         self.dispatch_rk4(pipelines, &mut cmd_buf);
         unsafe {
             cmd_buf
                 .write_timestamp(
                     base.query_pool.clone(),
                     crate::querybank::RK4_AFTER,
+                    PipelineStage::AllCommands,
+                )
+                .unwrap();
+        }
+        self.dispatch_update_compute_grid(pipelines, &mut cmd_buf);
+        unsafe {
+            cmd_buf
+                .write_timestamp(
+                    base.query_pool.clone(),
+                    crate::querybank::GRID_UPDATE_AFTER,
                     PipelineStage::AllCommands,
                 )
                 .unwrap();
