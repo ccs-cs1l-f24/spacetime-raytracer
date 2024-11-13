@@ -7,11 +7,16 @@ use crate::boilerplate::BaseGpuState;
 // the rendering and simulation options
 // that should be tweakable live from the debug ui
 pub struct HotswapConfig {
+    // rendering options
     pub max_fps: u32,
     pub fullscreen: bool,
     // lightseconds per screenspace (whichever of window width/height is bigger)
     pub scale: f32,
     // present mode?
+
+    // sim options
+    pub h: f32,
+    pub k: f32,
 }
 
 impl HotswapConfig {
@@ -26,6 +31,8 @@ impl Default for HotswapConfig {
             max_fps: 144,
             fullscreen: false,
             scale: 1.0,
+            h: 0.005,
+            k: 50.0,
         }
     }
 }
@@ -65,7 +72,7 @@ impl DebugUiState {
                         (1000000.0 / self.time_since_last_frame.as_micros() as f32).ceil() as u64
                     ));
                     ui.separator();
-                    ui.heading("Settings");
+                    ui.heading("Render Settings");
                     // ui.horizontal(|ui| {
                     //     ui.radio_value(&mut self.config.fullscreen, false, "Windowed");
                     //     ui.radio_value(&mut self.config.fullscreen, true, "Fullscreen");
@@ -86,6 +93,15 @@ impl DebugUiState {
                     ui.horizontal(|ui| {
                         ui.label("Zoom");
                         ui.add(egui::Slider::new(&mut self.config.scale, 0.1..=2.0));
+                    });
+                    ui.heading("Simulation Settings");
+                    ui.horizontal(|ui| {
+                        ui.label("h");
+                        ui.add(egui::Slider::new(&mut self.config.h, 0.0005..=0.01));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("k");
+                        ui.add(egui::Slider::new(&mut self.config.k, 50.0..=500.0));
                     });
                 });
         })

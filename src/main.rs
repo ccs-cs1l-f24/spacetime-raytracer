@@ -212,15 +212,15 @@ impl winit::application::ApplicationHandler for App {
                         *recreate_swapchain = true;
                     }
 
-                    // TEMPORARY 
+                    // TEMPORARY
                     // this would otherwise be put after the render submission, to avoid wasting time idling
                     // but we put it here because points_norel uses softbody state's particle buf
                     // and surely that frame would be done now RIGHT??
-                    *in_flight_physics =
-                        Some(world.softbody_state.submit_per_frame_compute(
-                            &base_gpu,
-                            &pipeline_manager.softbody_compute,
-                        ));
+                    *in_flight_physics = Some(world.softbody_state.submit_per_frame_compute(
+                        &base_gpu,
+                        &pipeline_manager.softbody_compute,
+                        &debug_ui_state.config,
+                    ));
                     // wait on the in-flight physics before composing/submitting the next render op
                     if let Some(blocking_physics) = in_flight_physics.take() {
                         blocking_physics

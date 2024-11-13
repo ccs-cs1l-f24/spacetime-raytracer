@@ -28,7 +28,7 @@ use vulkano::{
     pipeline::PipelineBindPoint,
 };
 
-use crate::boilerplate::BaseGpuState;
+use crate::{boilerplate::BaseGpuState, debugui::HotswapConfig};
 
 pub mod point_render_nr;
 
@@ -92,8 +92,11 @@ pub struct Object {
 #[derive(BufferContents, Debug, Clone)]
 #[repr(C)]
 pub struct PushConstants {
-    h: f32,
     num_particles: u32,
+    h: f32,
+    immediate_neighbor_dist: f32,
+    diagonal_neighbor_dist: f32,
+    k: f32,
 }
 
 // we want resolutions of approximately 1 lightstep (ch where h is simulation tick)
@@ -175,11 +178,10 @@ pub struct SoftbodyState {
     forcesum: Subbuffer<[f32]>,
 
     euler_ds: Arc<PersistentDescriptorSet>,
-    // rk4_0_ds: PersistentDescriptorSet,
-    // rk4_1_ds: PersistentDescriptorSet,
-    // rk4_2_ds: PersistentDescriptorSet,
-    // rk4_3_ds: PersistentDescriptorSet,
-    // rk4_4_ds: PersistentDescriptorSet,
+    rk4_0_ds: Arc<PersistentDescriptorSet>,
+    rk4_1_3_ds: Arc<PersistentDescriptorSet>,
+    rk4_2_ds: Arc<PersistentDescriptorSet>,
+    rk4_4_ds: Arc<PersistentDescriptorSet>,
 
     // objects
     object_staging: Subbuffer<[Object]>,
@@ -315,6 +317,54 @@ impl SoftbodyState {
             [],
         )
         .unwrap();
+        let rk4_0_ds = PersistentDescriptorSet::new(
+            &base.descriptor_set_allocator,
+            pipelines.rk4_set_layout.clone(),
+            [
+                WriteDescriptorSet::buffer(0, particle_buf.clone()),
+                WriteDescriptorSet::buffer(1, particle_buf.clone()),
+                WriteDescriptorSet::buffer(2, particle_buf_intermediate1.clone()),
+                WriteDescriptorSet::buffer(3, forcesum.clone()),
+            ],
+            [],
+        )
+        .unwrap();
+        let rk4_1_3_ds = PersistentDescriptorSet::new(
+            &base.descriptor_set_allocator,
+            pipelines.rk4_set_layout.clone(),
+            [
+                WriteDescriptorSet::buffer(0, particle_buf.clone()),
+                WriteDescriptorSet::buffer(1, particle_buf_intermediate1.clone()),
+                WriteDescriptorSet::buffer(2, particle_buf_intermediate2.clone()),
+                WriteDescriptorSet::buffer(3, forcesum.clone()),
+            ],
+            [],
+        )
+        .unwrap();
+        let rk4_2_ds = PersistentDescriptorSet::new(
+            &base.descriptor_set_allocator,
+            pipelines.rk4_set_layout.clone(),
+            [
+                WriteDescriptorSet::buffer(0, particle_buf.clone()),
+                WriteDescriptorSet::buffer(1, particle_buf_intermediate2.clone()),
+                WriteDescriptorSet::buffer(2, particle_buf_intermediate1.clone()),
+                WriteDescriptorSet::buffer(3, forcesum.clone()),
+            ],
+            [],
+        )
+        .unwrap();
+        let rk4_4_ds = PersistentDescriptorSet::new(
+            &base.descriptor_set_allocator,
+            pipelines.rk4_set_layout.clone(),
+            [
+                WriteDescriptorSet::buffer(0, particle_buf.clone()),
+                WriteDescriptorSet::buffer(1, particle_buf.clone()),
+                WriteDescriptorSet::buffer(2, particle_buf.clone()),
+                WriteDescriptorSet::buffer(3, forcesum.clone()),
+            ],
+            [],
+        )
+        .unwrap();
         Self {
             particles: vec![],
             objects: vec![],
@@ -324,6 +374,10 @@ impl SoftbodyState {
             particle_buf_intermediate2,
             forcesum,
             euler_ds,
+            rk4_0_ds,
+            rk4_1_3_ds,
+            rk4_2_ds,
+            rk4_4_ds,
             object_staging,
             object_buf,
             object_ds,
@@ -395,19 +449,22 @@ impl SoftbodyState {
         &self,
         base: &BaseGpuState,
         pipelines: &SoftbodyComputePipelines,
+        debug_cfg: &HotswapConfig,
     ) -> Box<dyn GpuFuture> {
         let mut cmd_buf = base.create_primary_command_buffer();
-        self.dispatch_euler(pipelines, &mut cmd_buf);
+        // self.dispatch_euler(pipelines, &mut cmd_buf, debug_cfg);
+        self.dispatch_rk4(pipelines, &mut cmd_buf, debug_cfg);
         vulkano::sync::now(base.device.clone())
             .then_execute(base.queue.clone(), cmd_buf.build().unwrap())
             .unwrap()
             .boxed()
     }
 
-    pub fn dispatch_euler(
+    fn dispatch_euler(
         &self,
         pipelines: &SoftbodyComputePipelines,
         cmd_buf: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        debug_cfg: &HotswapConfig,
     ) {
         cmd_buf
             .bind_pipeline_compute(pipelines.euler.clone())
@@ -416,9 +473,14 @@ impl SoftbodyState {
                 pipelines.pipeline_layout.clone(),
                 0,
                 PushConstants {
-                    h: 0.01, // TODO
+                    // TODO make these more configurable
+                    // slash always correct
                     num_particles: self.particles.len() as u32,
-                },
+                    h: debug_cfg.h,
+                    immediate_neighbor_dist: 0.005,
+                    diagonal_neighbor_dist: (0.005f32 * 0.005 + 0.005 * 0.005).sqrt(),
+                    k: debug_cfg.k,
+                }
             )
             .unwrap()
             .bind_descriptor_sets(
@@ -431,9 +493,77 @@ impl SoftbodyState {
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
             .unwrap();
     }
-    // pub fn dispatch_rk4(&self, pipelines: &SoftbodyComputePipelines) {
-    //     todo!()
-    // }
+
+    fn dispatch_rk4(
+        &self,
+        pipelines: &SoftbodyComputePipelines,
+        cmd_buf: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        debug_cfg: &HotswapConfig,
+    ) {
+        cmd_buf
+            .bind_pipeline_compute(pipelines.euler.clone())
+            .unwrap()
+            .push_constants(
+                pipelines.pipeline_layout.clone(),
+                0,
+                PushConstants {
+                    // TODO make these more configurable
+                    // slash always correct
+                    num_particles: self.particles.len() as u32,
+                    h: debug_cfg.h,
+                    immediate_neighbor_dist: 0.005,
+                    diagonal_neighbor_dist: (0.005f32 * 0.005 + 0.005 * 0.005).sqrt(),
+                    k: debug_cfg.k,
+                },
+            )
+            .unwrap()
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                pipelines.pipeline_layout.clone(),
+                0,
+                vec![self.rk4_0_ds.clone(), self.object_ds.clone()],
+            )
+            .unwrap()
+            .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
+            .unwrap()
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                pipelines.pipeline_layout.clone(),
+                0,
+                self.rk4_1_3_ds.clone(),
+            )
+            .unwrap()
+            .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
+            .unwrap()
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                pipelines.pipeline_layout.clone(),
+                0,
+                self.rk4_2_ds.clone(),
+            )
+            .unwrap()
+            .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
+            .unwrap()
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                pipelines.pipeline_layout.clone(),
+                0,
+                self.rk4_1_3_ds.clone(),
+            )
+            .unwrap()
+            .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
+            .unwrap()
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                pipelines.pipeline_layout.clone(),
+                0,
+                self.rk4_4_ds.clone(),
+            )
+            .unwrap()
+            .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
+            .unwrap();
+    }
+
     // pub fn update_collision_grid(&self, pipelines: &SoftbodyComputePipelines) {
     //     todo!()
     // }
@@ -569,7 +699,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
             push_constant_ranges: vec![PushConstantRange {
                 stages: ShaderStages::COMPUTE,
                 offset: 0,
-                size: 8,
+                size: size_of::<PushConstants>() as u32,
             }],
             set_layouts: vec![rk4_set_layout.clone(), objects_set_layout.clone()],
             ..Default::default()
