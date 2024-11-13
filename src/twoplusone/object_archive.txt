@@ -1,0 +1,353 @@
+// use nalgebra::{Rotation2, Vector2};
+// use smallvec::SmallVec;
+// use vulkano::{
+//     acceleration_structure::{
+//         AccelerationStructureBuildGeometryInfo, AccelerationStructureBuildRangeInfo,
+//         AccelerationStructureBuildType, AccelerationStructureGeometries,
+//         AccelerationStructureGeometryTrianglesData, BuildAccelerationStructureFlags,
+//         BuildAccelerationStructureMode, GeometryFlags,
+//     },
+//     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, IndexBuffer, Subbuffer},
+//     command_buffer::{BufferCopy, CopyBufferInfo},
+//     format::Format,
+//     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter},
+//     pipeline::graphics::vertex_input::Vertex,
+//     sync::GpuFuture,
+// };
+
+// use crate::boilerplate::BaseGpuState;
+
+// pub struct ObjectManager {
+//     pub observer: Perspective,
+// }
+
+// impl ObjectManager {
+//     pub fn update_worldlines(&self) {
+//         //
+//     }
+
+//     fn view_from_observer(&self, subject: &Perspective) -> Perspective {
+//         let position = subject.position - self.observer.position;
+//         let velocity = velocity_addition_2d(subject.velocity, -self.observer.velocity);
+//         let gamma = gamma(velocity.magnitude());
+//         let relativistic_mass = gamma * (subject.gamma.recip() * subject.relativistic_mass); // m = γm0
+//         let relativistic_momentum = relativistic_mass * velocity; // p = mv
+//         let relativistic_energy = relativistic_mass * C2; // E = mc^2
+//         Perspective {
+//             position,
+//             velocity,
+//             gamma,
+//             relativistic_mass,
+//             relativistic_momentum,
+//             relativistic_energy,
+//         }
+//     }
+// }
+
+// const C2: f32 = 1000.0;
+
+// // lorentz transformations with transverse velocities :P
+// // so we rotate other to [v, 0] (applying the same transformation to self)
+// // then apply the transverse velocity formula
+// // then rotate back
+// fn velocity_addition_2d(velocity: Vector2<f32>, other: Vector2<f32>) -> Vector2<f32> {
+//     let theta = if other.x == 0.0 {
+//         std::f32::consts::FRAC_PI_4 * -other.y.signum()
+//     } else {
+//         -(other.y / other.x).atan()
+//     };
+//     let rot = Rotation2::new(theta);
+//     let v = rot * other;
+//     assert_eq!(v.y, 0.0); // TODO remove this assert once this is tested
+//     let v = v.x;
+//     let gamma_v = gamma(v);
+//     let u = rot * velocity;
+//     let nx = (u.x + v) / (1.0 + (u.x * v / C2));
+//     let ny = (u.y / gamma_v) / (1.0 + (u.x * v / C2));
+//     let n = rot.inverse() * Vector2::new(nx, ny);
+//     n
+// }
+
+// fn gamma(v: f32) -> f32 {
+//     (1.0 - v * v / C2).sqrt().recip()
+// }
+
+// #[derive(Debug, Clone)]
+// pub struct Perspective {
+//     pub position: Vector2<f32>,
+//     pub velocity: Vector2<f32>,
+//     pub gamma: f32,
+//     pub relativistic_mass: f32,
+//     pub relativistic_momentum: Vector2<f32>,
+//     pub relativistic_energy: f32,
+// }
+
+// impl std::fmt::Display for Perspective {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.write_fmt(format_args!("Relative Position: {:?}\n", self.position))?;
+//         f.write_fmt(format_args!("Relative Velocity: {:?}\n", self.velocity))?;
+//         f.write_fmt(format_args!("γ = {}\n", self.gamma))?;
+//         f.write_fmt(format_args!(
+//             "m0 = {}\n",
+//             self.relativistic_mass * self.gamma.recip()
+//         ))?;
+//         f.write_fmt(format_args!("m = {}\n", self.relativistic_mass))?;
+//         f.write_fmt(format_args!("p = {:?}\n", self.relativistic_momentum))?;
+//         f.write_fmt(format_args!("E = {}", self.relativistic_energy))?;
+//         Ok(())
+//     }
+// }
+
+// #[derive(BufferContents, Vertex, Debug)]
+// #[repr(transparent)]
+// pub struct ModelVertex {
+//     #[format(R32G32B32_SFLOAT)]
+//     spacetime_pos: [f32; 3],
+// }
+
+// // one per frame in flight
+// pub struct Worldline {
+//     model: ModelSpec,
+//     // pre-transformed from model space/static frame to world space/ground frame
+//     vertices: Subbuffer<[ModelVertex]>, // ring buffers
+//     indices: Subbuffer<[u32]>,
+//     frames_stored: u32, // number of frames this worldline holds in memory
+//     frames_in_use: u32, // increments each frame, maxes out at frames_stored
+//     current_frame: u32, // wraps back around to 0
+// }
+
+// impl Worldline {
+//     pub fn initialize(base: &BaseGpuState, model: ModelSpec, frames_stored: u64) -> Self {
+//         let vertices = Buffer::new_slice::<ModelVertex>(
+//             base.memory_allocator.clone(),
+//             BufferCreateInfo {
+//                 usage: BufferUsage::VERTEX_BUFFER | BufferUsage::TRANSFER_DST,
+//                 ..Default::default()
+//             },
+//             AllocationCreateInfo {
+//                 memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+//                 ..Default::default()
+//             },
+//             model.vertices.len() as u64 * frames_stored,
+//         )
+//         .unwrap();
+//         let indices = Buffer::new_slice::<u32>(
+//             base.memory_allocator.clone(),
+//             BufferCreateInfo {
+//                 usage: BufferUsage::INDEX_BUFFER | BufferUsage::TRANSFER_DST,
+//                 ..Default::default()
+//             },
+//             AllocationCreateInfo {
+//                 memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+//                 ..Default::default()
+//             },
+//             model.indices.len() as u64 * frames_stored,
+//         )
+//         .unwrap();
+//         // let lorentz_transform = Buffer::new_sized::<[[f32; 4]; 3]>(
+//         //     base.memory_allocator.clone(),
+//         //     BufferCreateInfo {
+//         //         usage: BufferUsage::INDEX_BUFFER | BufferUsage::TRANSFER_DST,
+//         //         ..Default::default()
+//         //     },
+//         //     AllocationCreateInfo {
+//         //         memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+//         //         ..Default::default()
+//         //     },
+//         // )
+//         // .unwrap();
+//         Self {
+//             model,
+//             vertices,
+//             indices,
+//             frames_stored: frames_stored as u32,
+//             frames_in_use: 0,
+//             current_frame: 0,
+//         }
+//     }
+
+//     pub fn add_frame(&mut self, base: &BaseGpuState) {
+//         self.frames_in_use = (self.frames_in_use + 1).min(self.frames_stored);
+//         self.current_frame = (self.current_frame + 1) % self.frames_stored;
+
+//         let mut vtx_staging = self
+//             .model
+//             .staging_vtx_buffer
+//             .mapped_slice()
+//             .unwrap()
+//             .as_ptr() as *mut ModelVertex;
+//         let mut idx_staging = self
+//             .model
+//             .staging_index_buffer
+//             .mapped_slice()
+//             .unwrap()
+//             .as_ptr() as *mut u32;
+//         unsafe {
+//             std::ptr::copy(
+//                 self.model.vertices.as_ptr(),
+//                 vtx_staging,
+//                 self.model.vertices.len(),
+//             );
+//             vtx_staging = vtx_staging.add(self.model.vertices.len());
+//             std::ptr::copy(
+//                 self.model.indices.as_ptr(),
+//                 idx_staging,
+//                 self.model.indices.len(),
+//             );
+//             idx_staging = idx_staging.add(self.model.indices.len());
+//         }
+//         let _ = vtx_staging; // don't let the mapped pointers persist to when the transfer op starts
+//         let _ = idx_staging;
+
+//         let mut cbuf_builder = base.create_primary_command_buffer();
+//         let vtx_size = (self.model.vertices.len() * size_of::<ModelVertex>()) as u64;
+//         let idx_size = (self.model.indices.len() * size_of::<u32>()) as u64;
+//         cbuf_builder
+//             .copy_buffer(CopyBufferInfo {
+//                 regions: SmallVec::from_buf([BufferCopy {
+//                     src_offset: 0,
+//                     dst_offset: 0,
+//                     size: vtx_size,
+//                     ..Default::default()
+//                 }]),
+//                 ..CopyBufferInfo::buffers(
+//                     self.model.staging_vtx_buffer.as_bytes().clone(),
+//                     self.vertices
+//                         .clone()
+//                         .slice(self.model.vertices.len() as u64 * self.current_frame as u64..)
+//                         .as_bytes()
+//                         .clone(),
+//                 )
+//             })
+//             .unwrap()
+//             .copy_buffer(CopyBufferInfo {
+//                 regions: SmallVec::from_buf([BufferCopy {
+//                     src_offset: 0,
+//                     dst_offset: 0,
+//                     size: idx_size,
+//                     ..Default::default()
+//                 }]),
+//                 ..CopyBufferInfo::buffers(
+//                     self.model.staging_index_buffer.as_bytes().clone(),
+//                     self.indices
+//                         .clone()
+//                         .slice(self.model.indices.len() as u64 * self.current_frame as u64..)
+//                         .as_bytes()
+//                         .clone(),
+//                 )
+//             })
+//             .unwrap();
+//         vulkano::sync::future::now(base.device.clone())
+//             .then_execute(base.queue.clone(), cbuf_builder.build().unwrap())
+//             .unwrap()
+//             .then_signal_fence_and_flush()
+//             .unwrap()
+//             .wait(None)
+//             .unwrap();
+//     }
+
+//     // pub fn update_blas(&self, base: &BaseGpuState) {
+//     //     let triangles = AccelerationStructureGeometryTrianglesData {
+//     //         vertex_data: Some(self.vertices.clone().into_bytes()),
+//     //         vertex_stride: std::mem::size_of::<ModelVertex>() as u32,
+//     //         index_data: Some(IndexBuffer::U32(self.indices.clone())),
+//     //         max_vertex: self.model.num_vertices * self.frames_in_use,
+//     //         flags: GeometryFlags::empty(),
+//     //         transform_data: None, //Some(self.lorentz_transform.clone()),
+//     //         ..AccelerationStructureGeometryTrianglesData::new(Format::R32G32B32_SFLOAT)
+//     //     };
+//     //     let range_info = AccelerationStructureBuildRangeInfo {
+//     //         first_vertex: 0,
+//     //         primitive_count: self.model.num_primitives * self.frames_in_use, // 3 triangles per index
+//     //         primitive_offset: 0,
+//     //         transform_offset: 0,
+//     //     };
+//     //     let build_sizes_info = base
+//     //         .device
+//     //         .acceleration_structure_build_sizes(
+//     //             AccelerationStructureBuildType::Device,
+//     //             &AccelerationStructureBuildGeometryInfo {
+//     //                 flags: BuildAccelerationStructureFlags::ALLOW_UPDATE,
+//     //                 ..AccelerationStructureBuildGeometryInfo::new(
+//     //                     AccelerationStructureGeometries::Triangles(vec![triangles]),
+//     //                 )
+//     //             },
+//     //             &[self.model.num_primitives * self.frames_stored],
+//     //         )
+//     //         .unwrap();
+//     //     AccelerationStructureBuildGeometryInfo {
+//     //         flags: BuildAccelerationStructureFlags::ALLOW_UPDATE,
+//     //         mode: BuildAccelerationStructureMode::Update(()),
+//     //         dst_acceleration_structure: Some(()),
+//     //         scratch_data: Some(()),
+//     //         ..AccelerationStructureBuildGeometryInfo::new(
+//     //             AccelerationStructureGeometries::Triangles(vec![triangles]),
+//     //         )
+//     //     };
+//     // }
+// }
+
+// pub struct ModelSpec {
+//     pub vertices: Vec<ModelVertex>,
+//     pub indices: Vec<u32>,
+//     pub num_vertices: u32,
+//     pub num_primitives: u32,
+//     // also throwing in the staging buffers for convenience
+//     // pretty convenient, right? :D
+//     staging_vtx_buffer: Subbuffer<[ModelVertex]>,
+//     staging_index_buffer: Subbuffer<[u32]>,
+// }
+
+// pub fn triangle(base: &BaseGpuState) -> ModelSpec {
+//     let vertices = vec![
+//         ModelVertex {
+//             spacetime_pos: [-5.0, -5.0, 0.0],
+//         },
+//         ModelVertex {
+//             spacetime_pos: [0.0, 0.0, 0.0],
+//         },
+//         ModelVertex {
+//             spacetime_pos: [5.0, -5.0, 0.0],
+//         },
+//     ];
+//     let indices = vec![0, 1, 2];
+//     // TODO add room for connective tissue
+//     let staging_vtx_buffer = Buffer::new_slice::<ModelVertex>(
+//         base.memory_allocator.clone(),
+//         BufferCreateInfo {
+//             usage: BufferUsage::TRANSFER_SRC,
+//             ..Default::default()
+//         },
+//         AllocationCreateInfo {
+//             memory_type_filter: MemoryTypeFilter::PREFER_HOST
+//                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+//             ..Default::default()
+//         },
+//         vertices.len() as u64,
+//     )
+//     .unwrap();
+//     let staging_index_buffer = Buffer::new_slice::<u32>(
+//         base.memory_allocator.clone(),
+//         BufferCreateInfo {
+//             usage: BufferUsage::TRANSFER_SRC,
+//             ..Default::default()
+//         },
+//         AllocationCreateInfo {
+//             memory_type_filter: MemoryTypeFilter::PREFER_HOST
+//                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+//             ..Default::default()
+//         },
+//         indices.len() as u64,
+//     )
+//     .unwrap();
+//     let num_vertices = vertices.len() as u32;
+//     let num_primitives = indices.len() as u32 / 3;
+//     ModelSpec {
+//         vertices,
+//         indices,
+//         num_vertices,
+//         num_primitives,
+//         staging_vtx_buffer,
+//         staging_index_buffer,
+//     }
+// }
