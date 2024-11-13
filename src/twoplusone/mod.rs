@@ -47,13 +47,23 @@ pub struct World {
 
 pub fn create_world(base: &BaseGpuState, pipelines: &PipelineManager) -> World {
     let mut softbody_state = softbody::SoftbodyState::create(base, &pipelines.softbody_compute);
+    // softbody_state.add_particles(
+    //     &mut softbody::image_to_softbody(
+    //         include_bytes!("../../softbodyimages/testimg.png").as_slice(),
+    //         0,
+    //     ),
+    //     softbody::Object {
+    //         offset: 0,
+    //         material_index: 0,
+    //     },
+    // );
     softbody_state.add_particles(
         &mut softbody::image_to_softbody(
-            include_bytes!("../../softbodyimages/testimg.png").as_slice(),
-            0,
+            include_bytes!("../../softbodyimages/testimg2.png").as_slice(),
+            1,
         ),
         softbody::Object {
-            offset: 0,
+            offset: 1,
             material_index: 0,
         },
     );

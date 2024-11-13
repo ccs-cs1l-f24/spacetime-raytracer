@@ -111,7 +111,7 @@ pub struct CollisionGridPushConstants {
 }
 
 // we want resolutions of approximately 1 lightstep (ch where h is simulation tick)
-// let's set an arbitrary resolution of 0.005 cs per pixel (200 particles per lightsecond)
+// let's set an arbitrary resolution of 0.0035 cs per pixel (200 particles per lightsecond)
 // please only feed this 8-bit depth RGB images cause everything else will fail
 // is BLOCKING ON GPU ACTIONS
 pub fn image_to_softbody<R: std::io::Read>(r: R, object_index: u32) -> Vec<Particle> {
@@ -133,8 +133,11 @@ pub fn image_to_softbody<R: std::io::Read>(r: R, object_index: u32) -> Vec<Parti
             particles.push(Particle {
                 immediate_neighbors: [-1, -1, -1, -1],
                 diagonal_neighbors: [-1, -1, -1, -1],
-                ground_pos: [pos.0 as f32 * 0.005, pos.1 as f32 * 0.005],
+                ground_pos: [pos.0 as f32 * 0.0035, pos.1 as f32 * 0.0035],
                 ground_vel: [0.0, 0.0],
+                // // gives each particle a little jitter
+                // // necessary if we're calling normalize(ground_vel) in the shaders
+                // ground_vel: [rand::random::<f32>() * 0.005, rand::random::<f32>() * 0.005],
                 rest_mass: 1.0,
                 object_index,
                 _a: 0,
@@ -587,11 +590,11 @@ impl SoftbodyState {
                     // slash always correct
                     num_particles: self.particles.len() as u32,
                     h: debug_cfg.h,
-                    immediate_neighbor_dist: 0.005,
-                    diagonal_neighbor_dist: (0.005f32 * 0.005 + 0.005 * 0.005).sqrt(),
+                    immediate_neighbor_dist: 0.0035,
+                    diagonal_neighbor_dist: (0.0035f32 * 0.0035 + 0.0035 * 0.0035).sqrt(),
                     k: debug_cfg.k,
                     grid_resolution: 0.02,
-                    collision_distance: 0.005,
+                    collision_distance: 0.0035,
                     collision_repulsion_coefficient: 3000.0,
                 },
             )
@@ -628,11 +631,11 @@ impl SoftbodyState {
                     // slash always correct
                     num_particles: self.particles.len() as u32,
                     h: debug_cfg.h,
-                    immediate_neighbor_dist: 0.005,
-                    diagonal_neighbor_dist: (0.005f32 * 0.005 + 0.005 * 0.005).sqrt(),
+                    immediate_neighbor_dist: 0.0035,
+                    diagonal_neighbor_dist: (0.0035f32 * 0.0035 + 0.0035 * 0.0035).sqrt(),
                     k: debug_cfg.k,
                     grid_resolution: 0.02,
-                    collision_distance: 0.005,
+                    collision_distance: 0.0035,
                     collision_repulsion_coefficient: 3000.0,
                 },
             )

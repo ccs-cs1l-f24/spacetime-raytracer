@@ -15,6 +15,8 @@
 // // these should probably be the same thing in general
 // // but i'm separating them for clarity
 
+// // see also: https://en.wikipedia.org/wiki/Velocity-addition_formula#General_configuration
+
 // // lorentz transformations with transverse velocities :P
 // // so we rotate other to [v, 0] (applying the same transformation to self)
 // // then apply the transverse velocity formula

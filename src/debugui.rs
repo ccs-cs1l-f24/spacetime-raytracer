@@ -30,8 +30,8 @@ impl Default for HotswapConfig {
             max_fps: 144,
             // fullscreen: false,
             scale: 1.0,
-            h: 0.005,
-            k: 2000.0,
+            h: 0.005, // diagonal neighbor distance
+            k: 12000.0,
         }
     }
 }
@@ -100,7 +100,7 @@ impl DebugUiState {
                     });
                     ui.horizontal(|ui| {
                         ui.label("k");
-                        ui.add(egui::Slider::new(&mut self.config.k, 100.0..=5000.0));
+                        ui.add(egui::Slider::new(&mut self.config.k, 5000.0..=20000.0));
                     });
                 });
         })
