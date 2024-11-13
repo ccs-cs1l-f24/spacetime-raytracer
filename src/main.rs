@@ -78,13 +78,8 @@ impl winit::application::ApplicationHandler for App {
                 event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(
                     // if the previous frame took longer than fps_duration to happen
                     // then take the L and set the target frame time to be now
-                    if requested_resume + state.debug_ui_state.config.fps_duration()
-                        < Instant::now()
-                    {
-                        Instant::now()
-                    } else {
-                        requested_resume + state.debug_ui_state.config.fps_duration()
-                    },
+                    (requested_resume + state.debug_ui_state.config.fps_duration())
+                        .max(Instant::now()),
                 ));
                 state
                     .debug_ui_state

@@ -3,6 +3,7 @@
 #ifdef VERTEX_SHADER
 
     #pragma vscode_glsllint_stage : vert
+    #pragma shader_stage(vertex)
 
     layout(location = 0) in vec3 pos;
 
@@ -19,6 +20,7 @@
 #ifdef FRAGMENT_SHADER
 
     #pragma vscode_glsllint_stage : frag
+    #pragma shader_stage(fragment)
 
     layout(location = 0) out vec4 out_color;
 

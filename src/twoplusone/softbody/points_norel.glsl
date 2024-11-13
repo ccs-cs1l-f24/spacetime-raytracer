@@ -3,6 +3,7 @@
 #ifdef VERTEX_SHADER
 
     #pragma vscode_glsllint_stage : vert
+    #pragma shader_stage(vertex)
 
     // we just read from the particles buffer used in the rk4
     // with appropriate stride and offset
@@ -30,6 +31,7 @@
 #ifdef FRAGMENT_SHADER
 
     #pragma vscode_glsllint_stage : frag
+    #pragma shader_stage(fragment)
 
     layout(location = 0) out vec4 out_color;
 
