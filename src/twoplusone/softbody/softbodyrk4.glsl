@@ -2,16 +2,7 @@
 
 #pragma vscode_glsllint_stage : comp
 
-struct Particle {
-    ivec4 immediate_neighbors;
-    ivec4 diagonal_neighbors;
-    vec2 ground_pos;
-    vec2 ground_vel;
-    float rest_mass;
-    uint object_index;
-    uint _a; // we love padding :)
-    uint _b;
-};
+#include "common.glsl"
 
 struct Object {
     uint offset; // in the main particle buffers
@@ -57,14 +48,18 @@ layout(set = 1, binding = 0) uniform Objects {
     Object objects[1024];
 };
 
-// layout(set = 2, binding = 0) buffer CollisionGrid1 {
-//     // cell hash, particle index (sorted by cell hash)
-//     ivec2 spatial_lookup[];
-// };
-// layout(set = 2, binding = 1) buffer CollisionGrid2 {
-//     // cell hash => where associated particle indices start in spatial_lookup
-//     int start_indices[];
-// };
+layout(set = 2, binding = 0) buffer CollisionGrid1 {
+    // cell hash, particle index (sorted by cell hash)
+    Particle __dontusethis[];
+};
+layout(set = 2, binding = 1) buffer CollisionGrid2 {
+    // cell hash, particle index (sorted by cell hash)
+    uvec2 spatial_lookup[];
+};
+layout(set = 2, binding = 2) buffer CollisionGrid3 {
+    // cell hash => where associated particle indices start in spatial_lookup
+    uint start_indices[];
+};
 
 layout(push_constant) uniform Settings {
     // // mouse pos (for debugging purposes)
@@ -78,6 +73,8 @@ layout(push_constant) uniform Settings {
     float immediate_neighbor_dist;
     float diagonal_neighbor_dist;
     float k;
+    // grid info
+    float grid_resolution;
 };
 
 // the forces applied to a particle are:
@@ -86,8 +83,21 @@ layout(push_constant) uniform Settings {
 // - global forces (gravity?, wind?, etc)
 vec2 get_forces() {
     Object o = objects[0]; // to stop vulkano from complaining about an unused descset binding
+
     Particle particle = state_particles[gl_GlobalInvocationID.x];
     vec2 forces = vec2(0.0, 0.0); // we accumulate forces here
+
+    // particle-particle collisions
+    ivec2 cell_coord = ivec2(floor(particle.ground_pos / grid_resolution));
+    uint index = start_indices[hash_key_from_cell(cell_coord, num_particles)];
+    do {
+        Particle p = state_particles[spatial_lookup[index++].y];
+        if (p.ground_pos == particle.ground_pos) continue;
+        float dist = distance(p.ground_pos, particle.ground_pos);
+        if (dist < 0.001) {
+            forces += 5000.0 * normalize(particle.ground_pos - p.ground_pos);
+        }
+    } while (index < num_particles && spatial_lookup[index].x == spatial_lookup[index + 1].x);
 
     // springs adhering the object together
     // ideally the spring grid is fine enough that each |d| is at most 1 lightframe
@@ -170,7 +180,10 @@ vec2 get_forces() {
 #endif
 #ifdef RK4STAGE_4
     void main() { // relies on original, out, force_acc
-        Object o = objects[0]; // to stop vulkano from complaining about an unused descset binding
+        // to stop vulkano from complaining about an unused descset binding
+        Object o = objects[0];
+        uvec2 u = spatial_lookup[0];
+
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;
         vec2 forces = force_acc[index];

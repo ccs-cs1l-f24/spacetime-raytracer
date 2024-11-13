@@ -3,6 +3,7 @@ use std::{sync::Arc, time::Instant};
 mod boilerplate;
 mod debugui;
 mod logimpl;
+mod querybank;
 
 mod twoplusone;
 
