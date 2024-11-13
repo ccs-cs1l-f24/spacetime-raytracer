@@ -76,7 +76,15 @@ impl winit::application::ApplicationHandler for App {
                     .as_mut()
                     .expect("Init state really should exist by now");
                 event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(
-                    requested_resume + state.debug_ui_state.config.fps_duration(),
+                    // if the previous frame took longer than fps_duration to happen
+                    // then take the L and set the target frame time to be now
+                    if requested_resume + state.debug_ui_state.config.fps_duration()
+                        < Instant::now()
+                    {
+                        Instant::now()
+                    } else {
+                        requested_resume + state.debug_ui_state.config.fps_duration()
+                    },
                 ));
                 state.debug_ui_state.time_since_last_frame = self.prev_frame_start.elapsed();
                 state.world.update_camera(
