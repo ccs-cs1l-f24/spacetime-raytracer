@@ -6,8 +6,8 @@ struct Particle {
     vec2 ground_vel;
     float rest_mass;
     uint object_index;
-    uint _a; // we love padding :)
-    uint _b;
+    uint id; // MUST BE UNIQUE
+    uint _a;
 };
 
 // gotta love uniform buffers automatically padding to 16 bytes :/
@@ -25,7 +25,7 @@ struct Object {
 // whatever it works for him
 // anyways this hash will index start_indices
 uint hash_key_from_cell(ivec2 coord, uint num_particles) {
-    uint a = uint(coord.x) * 15823;
-    uint b = uint(coord.y) * 9737333;
+    uint a = uint(abs(coord.x)) * 15823;
+    uint b = uint(abs(coord.y)) * 9737333;
     return (a + b) % num_particles;
 }

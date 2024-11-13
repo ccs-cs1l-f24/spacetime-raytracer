@@ -1,7 +1,7 @@
 use std::{
     borrow::Borrow,
     collections::{BTreeMap, HashMap},
-    sync::Arc,
+    sync::{atomic::{AtomicU32, Ordering}, Arc},
 };
 
 use smallvec::SmallVec;
@@ -68,8 +68,9 @@ pub struct Particle {
     pub rest_mass: f32,
     // which "object" is this particle part of
     pub object_index: u32,
+    // UNIQUE
+    pub id: u32,
     pub _a: u32,
-    pub _b: u32,
 }
 
 #[derive(BufferContents, Debug, Clone)]
@@ -108,6 +109,8 @@ pub struct CollisionGridPushConstants {
     step_index: u32,
 }
 
+static MAX_PARTICLE_ID: AtomicU32 = AtomicU32::new(0);
+
 // we want resolutions of approximately 1 lightstep (ch where h is simulation tick)
 // let's set an arbitrary resolution of 0.0035 cs per pixel
 // please only feed this 8-bit depth RGB images cause everything else will fail
@@ -145,8 +148,8 @@ pub fn image_to_softbody<R: std::io::Read>(
                 ground_vel: starting_ground_vel,
                 rest_mass: 1.0,
                 object_index,
+                id: MAX_PARTICLE_ID.fetch_add(1, Ordering::Relaxed),
                 _a: 0,
-                _b: 0,
             });
             particle_map.insert(pos, particles.len() - 1);
         }

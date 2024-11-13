@@ -77,23 +77,6 @@ layout(push_constant) uniform Settings {
     float bond_break_threshold;
 };
 
-// vec2 get_surface_normal(Particle particle) {
-//     vec2 normal = vec2(0.0);
-//     for (int i = 0; i < 4; i++) { // this loop should unroll... if there are performance issues i can manually unroll
-//         if (particle.immediate_neighbors[i] != -1) {
-//             Particle n = state_particles[particle.immediate_neighbors[i]];
-//             normal += particle.ground_pos - n.ground_pos;
-//         }
-//     }
-//     for (int i = 0; i < 4; i++) {
-//         if (particle.diagonal_neighbors[i] != -1) {
-//             Particle n = state_particles[particle.diagonal_neighbors[i]];
-//             normal += particle.ground_pos - n.ground_pos;
-//         }
-//     }
-//     return normalize(normal);
-// }
-
 // the forces applied to a particle are:
 // - springs
 // - collisions

@@ -27,6 +27,8 @@ use vulkano::{
 
 use crate::boilerplate::BaseGpuState;
 
+// this render pipeline renders the measured reality of the ground frame
+
 pub fn render(
     fbuf_index: u32,
     aspect_ratio: f32,
