@@ -123,7 +123,7 @@ pub struct BaseGpuState {
     pub queue: Arc<Queue>,
 
     pub query_pool: Arc<QueryPool>,
-    pub query_results_rolling: [u64; crate::querybank::NUM_QUERIES as usize],
+    pub query_results: [u64; crate::querybank::NUM_QUERIES as usize],
 
     pub swapchain_manager: SwapchainManager,
 
@@ -158,9 +158,9 @@ impl BaseGpuState {
                 vulkano::query::QueryResultFlags::WITH_AVAILABILITY,
             )
             .unwrap();
-        for i in 0..self.query_results_rolling.len() {
+        for i in 0..self.query_results.len() {
             if next[i * 2 + 1] != 0 {
-                self.query_results_rolling[i] = next[i * 2];
+                self.query_results[i] = next[i * 2];
             }
         }
     }
@@ -639,7 +639,7 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         device,
         queue,
         query_pool,
-        query_results_rolling: [0; crate::querybank::NUM_QUERIES as usize],
+        query_results: [0; crate::querybank::NUM_QUERIES as usize],
         swapchain_manager,
         memory_allocator,
         command_buffer_allocator,

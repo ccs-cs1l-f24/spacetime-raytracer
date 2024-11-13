@@ -7,9 +7,8 @@ use crate::boilerplate::BaseGpuState;
 // the rendering and simulation options
 // that should be tweakable live from the debug ui
 pub struct HotswapConfig {
-    // rendering options
     pub max_fps: u32,
-    // pub fullscreen: bool,
+
     // lightseconds per screenspace (whichever of window width/height is bigger)
     pub scale: f32,
     // present mode?
@@ -141,7 +140,7 @@ pub fn create_debug_ui_state(
         base.queue.clone(),
         base.swapchain_manager.swapchain_format(),
         egui_winit_vulkano::GuiConfig {
-            allow_srgb_render_target: false,
+            allow_srgb_render_target: true,
             is_overlay: true,
             samples: vulkano::image::SampleCount::Sample1,
         },

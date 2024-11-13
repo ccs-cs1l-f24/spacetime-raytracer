@@ -532,7 +532,6 @@ impl SoftbodyState {
         debug_cfg: &HotswapConfig,
     ) -> Box<dyn GpuFuture> {
         let mut cmd_buf = base.create_primary_command_buffer();
-        // self.dispatch_euler(pipelines, &mut cmd_buf, debug_cfg);
         unsafe {
             cmd_buf
                 .write_timestamp(
@@ -548,16 +547,7 @@ impl SoftbodyState {
                 .write_timestamp(
                     base.query_pool.clone(),
                     crate::querybank::RK4_AFTER,
-                    PipelineStage::ComputeShader,
-                )
-                .unwrap();
-        }
-        unsafe {
-            cmd_buf
-                .write_timestamp(
-                    base.query_pool.clone(),
-                    crate::querybank::GRID_UPDATE_BEFORE,
-                    PipelineStage::TopOfPipe,
+                    PipelineStage::AllCommands,
                 )
                 .unwrap();
         }
@@ -567,7 +557,7 @@ impl SoftbodyState {
                 .write_timestamp(
                     base.query_pool.clone(),
                     crate::querybank::GRID_UPDATE_AFTER,
-                    PipelineStage::ComputeShader,
+                    PipelineStage::AllCommands,
                 )
                 .unwrap();
         }
