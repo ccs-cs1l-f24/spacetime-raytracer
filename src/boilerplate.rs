@@ -123,6 +123,7 @@ pub struct BaseGpuState {
     pub queue: Arc<Queue>,
 
     pub query_pool: Arc<QueryPool>,
+    pub query_results_rolling: [u64; crate::querybank::NUM_QUERIES as usize],
 
     pub swapchain_manager: SwapchainManager,
 
@@ -146,6 +147,38 @@ impl BaseGpuState {
             CommandBufferUsage::OneTimeSubmit,
         )
         .unwrap()
+    }
+
+    pub fn update_query_results(&mut self) {
+        let mut next = [0u64; crate::querybank::NUM_QUERIES as usize * 2];
+        self.query_pool
+            .get_results(
+                0..crate::querybank::NUM_QUERIES,
+                &mut next,
+                vulkano::query::QueryResultFlags::WITH_AVAILABILITY,
+            )
+            .unwrap();
+        for i in 0..self.query_results_rolling.len() {
+            if next[i * 2 + 1] != 0 {
+                self.query_results_rolling[i] = next[i * 2];
+            }
+        }
+    }
+
+    pub fn reset_query_pool(&self) {
+        let mut cbuf = self.create_primary_command_buffer();
+        unsafe {
+            cbuf.reset_query_pool(self.query_pool.clone(), 0..crate::querybank::NUM_QUERIES)
+                .unwrap();
+        }
+        let cbuf = cbuf.build().unwrap();
+        vulkano::sync::now(self.device.clone())
+            .then_execute(self.queue.clone(), cbuf)
+            .unwrap()
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .wait(None)
+            .unwrap();
     }
 
     // handles both swapchain and framebuffer resizing
@@ -606,6 +639,7 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         device,
         queue,
         query_pool,
+        query_results_rolling: [0; crate::querybank::NUM_QUERIES as usize],
         swapchain_manager,
         memory_allocator,
         command_buffer_allocator,

@@ -18,6 +18,7 @@ use vulkano::{
         ComputePipeline, PipelineLayout, PipelineShaderStageCreateInfo,
     },
     shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages},
+    sync::PipelineStage,
 };
 use vulkano::{
     command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
@@ -532,14 +533,44 @@ impl SoftbodyState {
     ) -> Box<dyn GpuFuture> {
         let mut cmd_buf = base.create_primary_command_buffer();
         // self.dispatch_euler(pipelines, &mut cmd_buf, debug_cfg);
-        // unsafe {
-        //     cmd_buf.begin_query(base.query_pool.clone(), crate::querybank::QUERY_RK4, Default::default()).unwrap();
-        //     cmd_buf.end_query(base.query_pool.clone(), crate::querybank::QUERY_RK4);
-        //     cmd_buf.copy_query_pool_results(query_pool, queries, destination, flags).unwrap();
-        //     cmd_buf.reset_query_pool(base.query_pool.clone(), 0..crate::querybank::NUM_QUERIES).unwrap();
-        // }
+        unsafe {
+            cmd_buf
+                .write_timestamp(
+                    base.query_pool.clone(),
+                    crate::querybank::RK4_BEFORE,
+                    PipelineStage::TopOfPipe,
+                )
+                .unwrap();
+        }
         self.dispatch_rk4(pipelines, &mut cmd_buf, debug_cfg);
+        unsafe {
+            cmd_buf
+                .write_timestamp(
+                    base.query_pool.clone(),
+                    crate::querybank::RK4_AFTER,
+                    PipelineStage::ComputeShader,
+                )
+                .unwrap();
+        }
+        unsafe {
+            cmd_buf
+                .write_timestamp(
+                    base.query_pool.clone(),
+                    crate::querybank::GRID_UPDATE_BEFORE,
+                    PipelineStage::TopOfPipe,
+                )
+                .unwrap();
+        }
         self.dispatch_update_compute_grid(pipelines, &mut cmd_buf);
+        unsafe {
+            cmd_buf
+                .write_timestamp(
+                    base.query_pool.clone(),
+                    crate::querybank::GRID_UPDATE_AFTER,
+                    PipelineStage::ComputeShader,
+                )
+                .unwrap();
+        }
         vulkano::sync::now(base.device.clone())
             .then_execute(base.queue.clone(), cmd_buf.build().unwrap())
             .unwrap()
