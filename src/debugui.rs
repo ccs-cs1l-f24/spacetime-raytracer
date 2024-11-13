@@ -8,14 +8,6 @@ use crate::boilerplate::BaseGpuState;
 // that should be tweakable live from the debug ui
 pub struct HotswapConfig {
     pub max_fps: u32,
-
-    // lightseconds per screenspace (whichever of window width/height is bigger)
-    pub scale: f32,
-    // present mode?
-
-    // sim options
-    pub h: f32,
-    pub k: f32,
 }
 
 impl HotswapConfig {
@@ -28,10 +20,6 @@ impl Default for HotswapConfig {
     fn default() -> Self {
         Self {
             max_fps: 144,
-            // fullscreen: false,
-            scale: 1.0,
-            h: 0.005, // diagonal neighbor distance
-            k: 12000.0,
         }
     }
 }
@@ -88,19 +76,6 @@ impl DebugUiState {
                             };
                         }
                         ui.text_edit_singleline(&mut self.max_fps_input);
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Zoom");
-                        ui.add(egui::Slider::new(&mut self.config.scale, 0.1..=2.0));
-                    });
-                    ui.heading("Simulation Settings");
-                    ui.horizontal(|ui| {
-                        ui.label("h");
-                        ui.add(egui::Slider::new(&mut self.config.h, 0.0005..=0.01));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("k");
-                        ui.add(egui::Slider::new(&mut self.config.k, 5000.0..=20000.0));
                     });
                 });
         })

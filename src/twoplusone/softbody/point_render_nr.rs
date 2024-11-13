@@ -31,11 +31,11 @@ pub fn render(
     fbuf_index: u32,
     aspect_ratio: f32,
     base: &BaseGpuState,
-    debugcfg: &crate::debugui::HotswapConfig,
     cmd_buf: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
     softbodies: &super::SoftbodyState,
     point_render_pipelines: &PointRenderPipelines,
     cam_pos: [f32; 2],
+    cam_scale: f32,
 ) {
     cmd_buf
         .begin_render_pass(
@@ -65,15 +65,15 @@ pub fn render(
             0,
             if aspect_ratio > 1.0 {
                 [
-                    debugcfg.scale.recip() * aspect_ratio.recip(),
-                    debugcfg.scale.recip(),
+                    cam_scale.recip() * aspect_ratio.recip(),
+                    cam_scale.recip(),
                     cam_pos[0],
                     cam_pos[1],
                 ]
             } else {
                 [
-                    debugcfg.scale.recip(),
-                    debugcfg.scale.recip() * aspect_ratio,
+                    cam_scale.recip(),
+                    cam_scale.recip() * aspect_ratio,
                     cam_pos[0],
                     cam_pos[1],
                 ]

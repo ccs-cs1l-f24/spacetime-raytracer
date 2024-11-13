@@ -29,7 +29,7 @@ use vulkano::{
     pipeline::PipelineBindPoint,
 };
 
-use crate::{boilerplate::BaseGpuState, debugui::HotswapConfig};
+use crate::boilerplate::BaseGpuState;
 
 pub mod point_render_nr;
 
@@ -532,7 +532,6 @@ impl SoftbodyState {
         &self,
         base: &BaseGpuState,
         pipelines: &SoftbodyComputePipelines,
-        debug_cfg: &HotswapConfig,
     ) -> Box<dyn GpuFuture> {
         let mut cmd_buf = base.create_primary_command_buffer();
         unsafe {
@@ -544,7 +543,7 @@ impl SoftbodyState {
                 )
                 .unwrap();
         }
-        self.dispatch_rk4(pipelines, &mut cmd_buf, debug_cfg);
+        self.dispatch_rk4(pipelines, &mut cmd_buf);
         unsafe {
             cmd_buf
                 .write_timestamp(
@@ -577,7 +576,6 @@ impl SoftbodyState {
         &self,
         pipelines: &SoftbodyComputePipelines,
         cmd_buf: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-        debug_cfg: &HotswapConfig,
     ) {
         cmd_buf
             .bind_pipeline_compute(pipelines.euler.clone())
@@ -589,13 +587,13 @@ impl SoftbodyState {
                     // TODO make these more configurable
                     // slash always correct
                     num_particles: self.particles.len() as u32,
-                    h: debug_cfg.h,
+                    h: 0.005,
                     immediate_neighbor_dist: 0.0035,
                     diagonal_neighbor_dist: (0.0035f32 * 0.0035 + 0.0035 * 0.0035).sqrt(),
-                    k: debug_cfg.k,
+                    k: 17500.0,
                     grid_resolution: 0.02,
                     collision_distance: 0.0035,
-                    collision_repulsion_coefficient: 3000.0,
+                    collision_repulsion_coefficient: 1000.0,
                 },
             )
             .unwrap()
@@ -618,7 +616,6 @@ impl SoftbodyState {
         &self,
         pipelines: &SoftbodyComputePipelines,
         cmd_buf: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-        debug_cfg: &HotswapConfig,
     ) {
         cmd_buf
             .bind_pipeline_compute(pipelines.rk4_0.clone())
@@ -630,13 +627,13 @@ impl SoftbodyState {
                     // TODO make these more configurable
                     // slash always correct
                     num_particles: self.particles.len() as u32,
-                    h: debug_cfg.h,
+                    h: 0.005,
                     immediate_neighbor_dist: 0.0035,
                     diagonal_neighbor_dist: (0.0035f32 * 0.0035 + 0.0035 * 0.0035).sqrt(),
-                    k: debug_cfg.k,
+                    k: 17500.0,
                     grid_resolution: 0.02,
-                    collision_distance: 0.0035,
-                    collision_repulsion_coefficient: 3000.0,
+                    collision_distance: 0.002,
+                    collision_repulsion_coefficient: 100.0,
                 },
             )
             .unwrap()

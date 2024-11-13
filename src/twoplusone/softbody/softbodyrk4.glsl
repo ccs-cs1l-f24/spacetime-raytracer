@@ -82,24 +82,39 @@ layout(push_constant) uniform Settings {
     float collision_distance;
 };
 
-vec2 get_surface_normal(Particle particle) {
-    vec2 normal = vec2(0.0);
-    for (int i = 0; i < 4; i++) { // this loop should unroll... if there are performance issues i can manually unroll
-        if (particle.immediate_neighbors[i] != -1) {
-            Particle n = state_particles[particle.immediate_neighbors[i]];
-            normal += particle.ground_pos - n.ground_pos;
-        }
-    }
-    for (int i = 0; i < 4; i++) {
-        if (particle.diagonal_neighbors[i] != -1) {
-            Particle n = state_particles[particle.diagonal_neighbors[i]];
-            normal += particle.ground_pos - n.ground_pos;
-        }
-    }
-    return normalize(normal);
-}
+// vec2 get_surface_normal(Particle particle) {
+//     vec2 normal = vec2(0.0);
+//     for (int i = 0; i < 4; i++) { // this loop should unroll... if there are performance issues i can manually unroll
+//         if (particle.immediate_neighbors[i] != -1) {
+//             Particle n = state_particles[particle.immediate_neighbors[i]];
+//             normal += particle.ground_pos - n.ground_pos;
+//         }
+//     }
+//     for (int i = 0; i < 4; i++) {
+//         if (particle.diagonal_neighbors[i] != -1) {
+//             Particle n = state_particles[particle.diagonal_neighbors[i]];
+//             normal += particle.ground_pos - n.ground_pos;
+//         }
+//     }
+//     return normalize(normal);
+// }
 
-// the forces applied to a particle are:
+// the forces icle) {
+//     vec2 normal = vec2(0.0);
+//     for (int i = 0; i < 4; i++) { // this loop should unroll... if there are performance issues i can manually unroll
+//         if (particle.immediate_neighbors[i] != -1) {
+//             Particle n = state_particles[particle.immediate_neighbors[i]];
+//             normal += particle.ground_pos - n.ground_pos;
+//         }
+//     }
+//     for (int i = 0; i < 4; i++) {
+//         if (particle.diagonal_neighbors[i] != -1) {
+//             Particle n = state_particles[particle.diagonal_neighbors[i]];
+//             normal += particle.ground_pos - n.ground_pos;
+//         }
+//     }
+//     return normalize(normal);
+// }applied to a particle are:
 // - springs
 // - collisions
 // - global forces (gravity?, wind?, etc)
@@ -113,15 +128,16 @@ vec2 get_forces() {
     ivec2 cell_coord = ivec2(floor(particle.ground_pos / grid_resolution));
     uint index = start_indices[hash_key_from_cell(cell_coord, num_particles)];
     do {
-        // no colliding when you're fully inside the softbody!
-        if (particle.immediate_neighbors[0] != -1 &&
-            particle.immediate_neighbors[1] != -1 &&
-            particle.immediate_neighbors[2] != -1 &&
-            particle.immediate_neighbors[3] != -1 && 
-            particle.diagonal_neighbors[0] != -1 &&
-            particle.diagonal_neighbors[1] != -1 &&
-            particle.diagonal_neighbors[2] != -1 &&
-            particle.diagonal_neighbors[3] != -1) break;
+        // // no colliding when you're fully inside the softbody!
+        // // NEVERMIND we actually want that
+        // if (particle.immediate_neighbors[0] != -1 &&
+        //     particle.immediate_neighbors[1] != -1 &&
+        //     particle.immediate_neighbors[2] != -1 &&
+        //     particle.immediate_neighbors[3] != -1 && 
+        //     particle.diagonal_neighbors[0] != -1 &&
+        //     particle.diagonal_neighbors[1] != -1 &&
+        //     particle.diagonal_neighbors[2] != -1 &&
+        //     particle.diagonal_neighbors[3] != -1) break;
         Particle p2 = state_particles[spatial_lookup[index++].y];
         // no colliding with your neighbors!
         if (particle.immediate_neighbors[0] == index - 1 ||
@@ -137,9 +153,10 @@ vec2 get_forces() {
         vec2 d = particle.ground_pos - p2.ground_pos;
         if (length(d) < collision_distance) {
             // TODO
-            vec2 normal = get_surface_normal(particle);
+            // vec2 normal = get_surface_normal(particle);
             // vec2 dv1 = length(particle.ground_vel) * normalize(p2.ground_vel) - particle.ground_vel;
-            // forces += normalize(d) * collision_repulsion_coefficient * (collision_distance - length(d));
+            forces += normalize(d) * collision_repulsion_coefficient;
+            // forces += normalize(d) * collision_repulsion_coefficient / length(d);
         }
     } while (index < num_particles && spatial_lookup[index].x == spatial_lookup[index + 1].x);
 

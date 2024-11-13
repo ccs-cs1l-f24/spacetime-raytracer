@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Instant};
 
 mod boilerplate;
 mod debugui;
+mod keyboard;
 mod logimpl;
 mod querybank;
 
@@ -18,6 +19,7 @@ fn main() {
     // even though to be fair the new designs are like always better
     let mut app = App {
         prev_frame_start: Instant::now(),
+        keyboard: keyboard::Keyboard::default(),
         init_state: None,
     };
     event_loop.run_app(&mut app).unwrap();
@@ -49,6 +51,7 @@ struct InitState {
 struct App {
     // for accurate profiling, since the "start" in resumetimereached often refers to something else
     prev_frame_start: Instant,
+    keyboard: keyboard::Keyboard,
     // i hate that this has to be option
     // but there's no way to initialize the vulkan context without the surface
     // which is to say the window... which the event loop has to be running to create
@@ -74,6 +77,10 @@ impl winit::application::ApplicationHandler for App {
                     requested_resume + state.debug_ui_state.config.fps_duration(),
                 ));
                 state.debug_ui_state.time_since_last_frame = self.prev_frame_start.elapsed();
+                state.world.update_camera(
+                    &self.keyboard,
+                    self.prev_frame_start.elapsed().as_secs_f32(),
+                );
                 self.prev_frame_start = Instant::now();
                 state.main_window.request_redraw();
             }
@@ -237,11 +244,11 @@ impl winit::application::ApplicationHandler for App {
                         main_window.inner_size().width as f32
                             / main_window.inner_size().height as f32,
                         base_gpu,
-                        &debug_ui_state.config,
                         &mut cmd_buf,
                         &world.softbody_state,
                         &pipeline_manager.point_pipelines,
-                        [1.0, 1.0],
+                        world.cam_ground_pos,
+                        world.zoom,
                     );
                     let cmd_buf = cmd_buf.build().unwrap();
 
@@ -287,31 +294,21 @@ impl winit::application::ApplicationHandler for App {
                     }
 
                     // submit the physics for the next frame :)
-                    *in_flight_physics = Some(world.softbody_state.submit_per_frame_compute(
-                        &base_gpu,
-                        &pipeline_manager.softbody_compute,
-                        &debug_ui_state.config,
-                    ));
+                    *in_flight_physics =
+                        Some(world.softbody_state.submit_per_frame_compute(
+                            &base_gpu,
+                            &pipeline_manager.softbody_compute,
+                        ));
                 } else {
                     unreachable!("Init state really must exist by now")
                 }
             }
             // TODO: keyboard & mouse input for the game
+            // winit::event::WindowEvent::CursorMoved { device_id, position } => {}
             // winit::event::WindowEvent::MouseInput { state, button, .. } => {}
-            // winit::event::WindowEvent::KeyboardInput {
-            //     event:
-            //         winit::event::KeyEvent {
-            //             // physical_key,
-            //             logical_key,
-            //             text,
-            //             state,
-            //             repeat,
-            //             ..
-            //         },
-            //     ..
-            // } => {
-            //     //
-            // }
+            winit::event::WindowEvent::KeyboardInput { event, .. } => {
+                self.keyboard.process_key_event(event);
+            }
             _ => {}
         }
     }
