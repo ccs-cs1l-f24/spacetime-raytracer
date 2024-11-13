@@ -62,7 +62,7 @@ layout(set = 0, binding = 3) buffer ForcesAccum {
 //     int start_indices[];
 // };
 
-layout(set = 2, binding = 0) uniform Objects {
+layout(set = 1, binding = 0) uniform Objects {
     // max uniform buffer size is 65536
     // so we get 8192 different objects at max
     // which seems like plenty
@@ -83,7 +83,8 @@ layout(push_constant) uniform Settings {
 // - global forces (gravity?, wind?, etc)
 vec2 get_forces() {
     Particle particle = state_particles[gl_GlobalInvocationID.x];
-    return vec2(0.0, 0.0);
+    Object o = objects[0];
+    return vec2(0.0, 0.1);
 }
 
 // euler (state_particles is original_particles)
@@ -91,6 +92,7 @@ vec2 get_forces() {
 #ifdef EULER
     void main() {
         uint index = gl_GlobalInvocationID.x;
+        if (index >= num_particles) return;
         vec2 forces = get_forces();
         out_particles[index].ground_vel += forces * h;
         out_particles[index].ground_pos += original_particles[index].ground_vel * h;
@@ -101,6 +103,7 @@ vec2 get_forces() {
 #ifdef RK4STAGE_0
     void main() { // relies on original, state, out, force_acc
         uint index = gl_GlobalInvocationID.x;
+        if (index >= num_particles) return;
         vec2 forces = get_forces();
         force_acc[index] += forces;
         vec2 new_vel = original_particles[index].ground_vel + forces * h / 2.0;
@@ -111,6 +114,7 @@ vec2 get_forces() {
 #ifdef RK4STAGE_1
     void main() { // relies on original, state, out, force_acc
         uint index = gl_GlobalInvocationID.x;
+        if (index >= num_particles) return;
         vec2 forces = get_forces();
         force_acc[index] += forces * 2.0;
         vec2 new_vel = original_particles[index].ground_vel + forces * h / 2.0;
@@ -121,6 +125,7 @@ vec2 get_forces() {
 #ifdef RK4STAGE_2
     void main() { // relies on original, state, out, force_acc
         uint index = gl_GlobalInvocationID.x;
+        if (index >= num_particles) return;
         vec2 forces = get_forces();
         force_acc[index] += forces * 2.0;
         vec2 new_vel = original_particles[index].ground_vel + forces * h;
@@ -131,6 +136,7 @@ vec2 get_forces() {
 #ifdef RK4STAGE_3
     void main() { // relies on state, force_acc
         uint index = gl_GlobalInvocationID.x;
+        if (index >= num_particles) return;
         vec2 forces = get_forces();
         force_acc[index] += forces;
     }
@@ -138,6 +144,7 @@ vec2 get_forces() {
 #ifdef RK4STAGE_4
     void main() { // relies on original, out, force_acc
         uint index = gl_GlobalInvocationID.x;
+        if (index >= num_particles) return;
         vec2 forces = force_acc[index];
         vec2 vel = original_particles[index].ground_vel + forces * h / 6.0;
         out_particles[index].ground_vel = vel;

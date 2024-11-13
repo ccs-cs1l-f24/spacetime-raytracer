@@ -205,6 +205,9 @@ impl winit::application::ApplicationHandler for App {
                         *recreate_swapchain = true;
                     }
                     let mut cmd_buf = base_gpu.create_primary_command_buffer();
+                    world
+                        .softbody_state
+                        .dispatch_euler(&pipeline_manager.softbody_compute, &mut cmd_buf);
                     twoplusone::softbody::point_render_nr::render(
                         present_image_index,
                         main_window.inner_size().width as f32

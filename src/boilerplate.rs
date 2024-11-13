@@ -532,9 +532,9 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         fill_mode_non_solid: true,
         ..Default::default()
     };
-    if !device_extensions.khr_acceleration_structure {
-        panic!("aaaahhhhhhhhh we need raytracing for this to workk") // we need raytracing actually
-    }
+    // if !device_extensions.khr_acceleration_structure {
+    //     panic!("aaaahhhhhhhhh we need raytracing for this to workk")
+    // }
 
     log::info!(
         "Chose the device: {} ({:?})",
@@ -561,7 +561,8 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         device.clone(),
         surface.clone(),
         window.inner_size().into(),
-        2, //cfg.base.desired_frames_in_flight,
+        // TODO increase this number
+        1, //cfg.base.desired_frames_in_flight,
     );
 
     let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
