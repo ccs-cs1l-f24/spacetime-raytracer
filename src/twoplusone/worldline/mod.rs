@@ -62,15 +62,19 @@ pub struct UpdateSoftbodiesState {
 
 pub struct UpdateSoftbodiesComputePipelines {
     particles_set_layout: Arc<DescriptorSetLayout>,
-    vertices_set_layout: Arc<DescriptorSetLayout>,
+    intermediate_edges_set_layout: Arc<DescriptorSetLayout>,
+    edge_map_set_layout: Arc<DescriptorSetLayout>,
 
     identify_vertices: Arc<ComputePipeline>,
     // identify_edges: Arc<ComputePipeline>,
-    // compact_edges_and_vertices: Arc<ComputePipeline>,
+    // compact_edges: Arc<ComputePipeline>,
+    // clear_edge_map: Arc<ComputePipeline>,
+    // write_edges_to_worldline: Arc<ComputePipeline>,
 }
 
 pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComputePipelines {
     base.register_cache("identify_vertices");
+    base.register_cache("identify_edges");
     let particles_set_layout = DescriptorSetLayout::new(
         base.device.clone(),
         DescriptorSetLayoutCreateInfo {
@@ -89,7 +93,7 @@ pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComp
         },
     )
     .unwrap();
-    let vertices_set_layout = DescriptorSetLayout::new(
+    let intermediate_edges_set_layout = DescriptorSetLayout::new(
         base.device.clone(),
         DescriptorSetLayoutCreateInfo {
             bindings: {
@@ -99,6 +103,24 @@ pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComp
                 };
                 let mut tree = BTreeMap::new();
                 tree.insert(0, binding.clone());
+                tree.insert(1, binding.clone());
+                tree
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let edge_map_set_layout = DescriptorSetLayout::new(
+        base.device.clone(),
+        DescriptorSetLayoutCreateInfo {
+            bindings: {
+                let binding = DescriptorSetLayoutBinding {
+                    stages: ShaderStages::COMPUTE,
+                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer)
+                };
+                let mut tree = BTreeMap::new();
+                tree.insert(0, binding.clone());
+                tree.insert(1, binding.clone());
                 tree
             },
             ..Default::default()
@@ -113,7 +135,11 @@ pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComp
                 offset: 0,
                 size: size_of::<UpdateSoftbodiesPushConstants>() as u32,
             }],
-            set_layouts: vec![particles_set_layout.clone(), vertices_set_layout.clone()],
+            set_layouts: vec![
+                particles_set_layout.clone(),
+                intermediate_edges_set_layout.clone(),
+                edge_map_set_layout.clone(),
+            ],
             ..Default::default()
         },
     )
@@ -147,7 +173,8 @@ pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComp
     .unwrap();
     UpdateSoftbodiesComputePipelines {
         particles_set_layout,
-        vertices_set_layout,
+        intermediate_edges_set_layout,
+        edge_map_set_layout,
         identify_vertices,
     }
 }

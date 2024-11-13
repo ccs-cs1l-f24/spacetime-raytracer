@@ -38,6 +38,7 @@ const SHADER_PATHS: &[(&str, &[&str])] = &[
             "IDENTIFY_EDGES",
             "COMPACT_EDGES",
             "CLEAR_EDGE_MAP",
+            "WRITE_EDGES_TO_WORLDLINE",
         ],
     ),
     // ("src/twoplusone/worldline/worldline3d", &[""]),

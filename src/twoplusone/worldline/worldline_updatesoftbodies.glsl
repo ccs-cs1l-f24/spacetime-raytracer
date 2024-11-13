@@ -218,8 +218,8 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
 
         ivec2 cell_coord = ivec2(floor(particle.ground_pos / grid_resolution));
         uint p_idx;
-        float shortest_distance = 1000.0; // ridiculously big distance
-        float second_shortest_distance = 999.0; // also ridiculously big
+        float shortest_distance = 999.0; // ridiculously big init distances
+        float second_shortest_distance = 1000.0;
         // if we've reached this part of the shader then there MUST be enough nearby vertices to populate these
         IntermediateSoftbodyWorldlineVertex closest_vtx;
         IntermediateSoftbodyWorldlineVertex second_closest_vtx;
@@ -273,7 +273,7 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
     }
 #endif
 
-#ifdef WRITE_EDGES_TO_STRUCT
+#ifdef WRITE_EDGES_TO_WORLDLINE
     void main() {
         uint index = gl_GlobalInvocationID.x;
         // TODO
