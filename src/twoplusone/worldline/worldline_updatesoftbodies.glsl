@@ -4,9 +4,9 @@
 #pragma shader_stage(compute)
 
 #include "common.glsl"
-#include "relativity.glsl"
 
 // n = 1/2/4/8 is left/right/up/down
+// dontya love macros :)
 #define PACK(p, n) int((p.id << 4) | n)
 
 // 32 bytes
@@ -24,7 +24,7 @@ struct IntermediateSoftbodyWorldlineVertex {
 };
 
 // 32 bytes
-struct EdgeEntry {
+struct Edge {
     WorldlineVertex v1;
     WorldlineVertex v2;
 };
@@ -45,25 +45,26 @@ layout(set = 0, binding = 2) buffer StartIndices {
     uint start_indices[];
 };
 
-layout(set = 1, binding = 0) buffer Vertices {
+layout(set = 1, binding = 0) buffer IntermediateVertices {
     // there are 4 vertices allocated for each particle
     IntermediateSoftbodyWorldlineVertex vertices[];
 };
-layout(set = 1, binding = 1) buffer Edges {
+layout(set = 1, binding = 1) buffer IntermediateEdges {
     // there are 8 edges allocated for each particle
-    EdgeEntry edges;
+    Edge edges[];
 };
 
-// there are 8 edges allocated for each particle (2 per generated vertex)
+// there are 8 edges for each particle (2 per generated vertex)
 // the below arrays are indexed by the edge hashes of two `IntermediateSoftbodyWorldlineVertex`s
 layout(set = 2, binding = 0) buffer EdgeMap1 {
-    // -1 for tombstone, 0 for does not exist, 1 for exists;
+    //  0 for does not exist, 1 for exists;
     // reset each time the edges are regenerated
+    // (we would use -1 for tombstone but there's no deleting edges only wiping the hashmap)
     int ledger[];
 };
 layout(set = 2, binding = 1) buffer EdgeMap2 {
     // data at edge_map[i] where ledger[i] != 1 is garbage
-    EdgeEntry edge_map[];
+    Edge edge_map[];
 };
 
 layout(push_constant) uniform Settings {
@@ -71,13 +72,9 @@ layout(push_constant) uniform Settings {
     float grid_resolution;
     float radius; // shouldn't be greater than like 1.5 * immediate_neighbor_dist
     float time; // (the z coord that should be used)
-    uint edge_map_capacity; // should be a power of 2 (should be the closest power of 2 to num_particles * 8)
+    uint edge_map_capacity; // must be >= num_particles * 8 (ideally a power of 2)
 };
 
-// for each particle, sample 4 points in each cardinal direction radius distance from its center
-// if such a sampled point is not in the radius of any nearby particles *that are connected to this particle*
-// then it's part of an object boundary :D
-// connect each particle to the closest 2 particles *that are connected to the particle*
 uint hash_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldlineVertex v2) {
     uint i1 = v1.packed_id;
     uint i2 = v2.packed_id;
@@ -91,13 +88,28 @@ void register_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyW
     // we use atomic to avoid sync problems when hash collisions happen
     while (atomicCompSwap(ledger[hash], 0, 1) != 0)
         hash = (hash + 1u) % edge_map_capacity;
-    EdgeEntry entry;
+    Edge entry;
     entry.v1 = WorldlineVertex(v1.pos, v1.object_index);
     entry.v2 = WorldlineVertex(v2.pos, v2.object_index);
     edge_map[hash] = entry;
 }
 
+bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldlineVertex v2) {
+    uint hash = hash_edge(v1, v2);
+    while (ledger[hash] != 0) {
+        if (
+            (edge_map[hash].v1.pos == v1.pos && edge_map[hash].v2.pos == v2.pos) ||
+            (edge_map[hash].v2.pos == v1.pos && edge_map[hash].v1.pos == v2.pos)
+        ) {
+            return true;
+        }
+        hash = (hash + 1u) % edge_map_capacity;
+    }
+    return false;
+}
+
 #ifdef IDENTIFY_VERTICES
+    // should be invoked for every PARTICLE
     void main() {
         uint index = gl_GlobalInvocationID.x;
 
@@ -167,7 +179,13 @@ void register_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyW
     }
 #endif
 
-#ifdef GENERATE_COMPARE_EDGES
+// identifies each vertex edge to add to edges
+// doesn't repeat edges
+#ifdef IDENTIFY_EDGES
+    // should be invoked for every POSSIBLE VERTEX (4x num_particles)
+    // note: to avoid double counting edges,
+    // we only add edges if our vertex has a greater packed id than the other one on the edge
+    // since packed ids are unique and strictly ordered this should be fine
     void main() {
         uint index = gl_GlobalInvocationID.x;
 
@@ -175,14 +193,34 @@ void register_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyW
         if (vtx.flag == -1) return;
         
         Particle particle = particles[index / 4];
+        // (includes edges that aren't actually added but would have been if this vertex's id were greater)
+        uint edges_added = 0;
 
-        // if the vertex has both its siblings, just use those edges
-        if (vtx.sibling_1_id != -1 && vtx.sibling_2_id != -1) {
-            //
+        // first connect the vertex to its siblings (if they exist)
+        // then go searching for another compatible vertex to connect to
+        if (vtx.sibling_1_id != -1) {
+            if (vtx.packed_id > vtx.sibling_1_id) {
+                uint offset = uint(log2(vtx.sibling_1_id & 15u));
+                IntermediateSoftbodyWorldlineVertex other = vertices[index & ~15u];
+                edges[index * 2 + edges_added] = Edge(WorldlineVertex(vtx.pos, vtx.object_index), WorldlineVertex(other.pos, other.object_index));
+            }
+            edges_added++;
         }
+        if (vtx.sibling_2_id != -1) {
+            if (vtx.packed_id > vtx.sibling_1_id) {
+                uint offset = uint(log2(vtx.sibling_1_id & 15u));
+                IntermediateSoftbodyWorldlineVertex other = vertices[index & ~15u];
+                edges[index * 2 + edges_added] = Edge(WorldlineVertex(vtx.pos, vtx.object_index), WorldlineVertex(other.pos, other.object_index));
+            }
+            edges_added++;
+        }
+        if (edges_added == 2) return;
 
         ivec2 cell_coord = ivec2(floor(particle.ground_pos / grid_resolution));
         uint p_idx;
+        float shortest_distance = 1000.0; // ridiculously big distance
+        float second_shortest_distance = 999.0; // also ridiculously big
+        // if we've reached this part of the shader then there MUST be enough nearby vertices to populate these
         IntermediateSoftbodyWorldlineVertex closest_vtx;
         IntermediateSoftbodyWorldlineVertex second_closest_vtx;
         for (int i = 0; i < 9; i++) { // 0 to 8 (inclusive) --- i=4 is 0,0
@@ -193,21 +231,51 @@ void register_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyW
                 for (int i = 0; i < 4; i++) {
                     IntermediateSoftbodyWorldlineVertex other_vtx = vertices[p_idx * 4 + i];
                     if (other_vtx.flag == -1) continue;
+                    if (other_vtx.object_index != vtx.object_index) continue;
                     // now we compare :D
+                    float d = distance(vtx.pos, other_vtx.pos);
+                    if (d < shortest_distance) {
+                        second_shortest_distance = shortest_distance;
+                        second_closest_vtx = closest_vtx;
+                        shortest_distance = d;
+                        closest_vtx = other_vtx;
+                    } else if (d < second_shortest_distance) {
+                        second_shortest_distance = d;
+                        second_closest_vtx = other_vtx;
+                    }
                 }
             } while (p_idx < num_particles && spatial_lookup[p_idx].x == spatial_lookup[p_idx + 1].x);
+        }
+        if (edges_added == 1) {
+            // add closest vtx only
+            edges[index * 2 + 1] = Edge(WorldlineVertex(vtx.pos, vtx.object_index), WorldlineVertex(closest_vtx.pos, closest_vtx.object_index));
+        } else {
+            // add both the identified vertices
+            edges[index * 2] = Edge(WorldlineVertex(vtx.pos, vtx.object_index), WorldlineVertex(closest_vtx.pos, closest_vtx.object_index));
+            edges[index * 2 + 1] = Edge(WorldlineVertex(vtx.pos, vtx.object_index), WorldlineVertex(second_closest_vtx.pos, second_closest_vtx.object_index));
         }
     }
 #endif
 
-#ifdef COMPACT_EDGES_AND_VERTICES
+#ifdef COMPACT_EDGES
+    // should be invoked for every POSSIBLE VERTEX
     void main() {
         uint index = gl_GlobalInvocationID.x;
+        // TODO
     }
 #endif
 
 #ifdef CLEAR_EDGE_MAP
+    // should be invoked for edge_map_capacity
+    void main() {
+        uint index = gl_GlobalInvocationID.x;
+        ledger[index] = 0;
+    }
 #endif
 
-#ifdef WRITE_REGISTER_EDGES
+#ifdef WRITE_EDGES_TO_STRUCT
+    void main() {
+        uint index = gl_GlobalInvocationID.x;
+        // TODO
+    }
 #endif

@@ -65,8 +65,8 @@ pub struct UpdateSoftbodiesComputePipelines {
     vertices_set_layout: Arc<DescriptorSetLayout>,
 
     identify_vertices: Arc<ComputePipeline>,
-    // generate_compare_register_edges: Arc<ComputePipeline>,
-    // mesh_edges: Arc<ComputePipeline>,
+    // identify_edges: Arc<ComputePipeline>,
+    // compact_edges_and_vertices: Arc<ComputePipeline>,
 }
 
 pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComputePipelines {

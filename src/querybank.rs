@@ -31,8 +31,7 @@ pub fn get_frame_perf_stats(base: &BaseGpuState) -> FramePerfStats {
             base.query_results[RK4_AFTER as usize] - base.query_results[TOP_OF_PHYSICS as usize],
         ),
         grid_update_time: Duration::from_nanos(
-            base.query_results[GRID_UPDATE_AFTER as usize]
-                - base.query_results[RK4_AFTER as usize],
+            base.query_results[GRID_UPDATE_AFTER as usize] - base.query_results[RK4_AFTER as usize],
         ),
     }
 }

@@ -58,6 +58,7 @@ layout(push_constant) uniform Settings {
 #endif
 
 #ifdef SORT_LOOKUP
+    // bitonic merge sort :)
     void main() {
         uint index = gl_GlobalInvocationID.x;
         uint h = index & (group_width - 1);

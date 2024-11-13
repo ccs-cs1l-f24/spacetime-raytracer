@@ -22,6 +22,7 @@ struct Object {
 
 // 16 bytes
 struct WorldlineVertex {
+    // to be clear this is still with respect to the ground frame
     vec3 pos;
     uint object_index;
 };

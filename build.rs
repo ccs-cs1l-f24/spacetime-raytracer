@@ -33,7 +33,12 @@ const SHADER_PATHS: &[(&str, &[&str])] = &[
     // ("src/twoplusone/worldline/raytrace", &[""]),
     (
         "src/twoplusone/worldline/worldline_updatesoftbodies",
-        &["IDENTIFY_VERTICES"],
+        &[
+            "IDENTIFY_VERTICES",
+            "IDENTIFY_EDGES",
+            "COMPACT_EDGES",
+            "CLEAR_EDGE_MAP",
+        ],
     ),
     // ("src/twoplusone/worldline/worldline3d", &[""]),
 ];
