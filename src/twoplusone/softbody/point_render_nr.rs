@@ -33,7 +33,7 @@ pub fn render(
     base: &BaseGpuState,
     debugcfg: &crate::debugui::HotswapConfig,
     cmd_buf: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-    softbodies: &super::SoftbodyRegistry,
+    softbodies: &super::SoftbodyState,
     point_render_pipelines: &PointRenderPipelines,
 ) {
     cmd_buf
@@ -75,13 +75,11 @@ pub fn render(
             },
         )
         .unwrap();
-    for body in softbodies.bodies.iter() {
-        cmd_buf
-            .bind_vertex_buffers(0, body.gpu_buffer.clone())
-            .unwrap()
-            .draw(body.gpu_buffer.len() as u32, 1, 0, 0)
-            .unwrap();
-    }
+    cmd_buf
+        .bind_vertex_buffers(0, softbodies.particle_buf.clone())
+        .unwrap()
+        .draw(softbodies.particles.len() as u32, 1, 0, 0)
+        .unwrap();
     cmd_buf.end_render_pass(Default::default()).unwrap();
 }
 
