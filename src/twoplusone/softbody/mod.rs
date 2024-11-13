@@ -87,6 +87,7 @@ pub struct Particle {
 pub struct Object {
     pub offset: u32,
     pub material_index: u32,
+    // pub k: f32,
 }
 
 #[derive(BufferContents, Debug, Clone)]
