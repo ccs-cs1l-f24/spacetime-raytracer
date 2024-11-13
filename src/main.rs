@@ -191,7 +191,6 @@ impl winit::application::ApplicationHandler for App {
                             Ok(stuff) => stuff,
                             Err(()) => {
                                 base_gpu.resize(main_window.inner_size().into());
-                                // scene_manager.update_framebuffers(base_gpu);
                                 base_gpu
                                     .swapchain_manager
                                     .acquire_image()
@@ -203,7 +202,7 @@ impl winit::application::ApplicationHandler for App {
                         *recreate_swapchain = true;
                     }
                     let mut cmd_buf = base_gpu.create_primary_command_buffer();
-                    twoplusone::point_render_nr::render(
+                    twoplusone::softbody::point_render_nr::render(
                         present_image_index,
                         main_window.inner_size().width as f32
                             / main_window.inner_size().height as f32,

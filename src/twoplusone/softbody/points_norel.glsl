@@ -9,6 +9,11 @@
     // keeps it simple :)
     layout(location = 0) in vec2 pos;
 
+    // we can use the rest_mass parameter of the particles
+    // to indicate whether it's been culled
+    // when we're testing our culler :D
+    //layout(location = 1) in float was_culled_indicator;
+
     layout(push_constant) uniform Info {
         vec2 worldspaceToScreenspace;
     };

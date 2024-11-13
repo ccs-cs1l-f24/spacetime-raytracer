@@ -4,6 +4,7 @@ use std::{
 };
 
 use smallvec::SmallVec;
+use vulkano::sync::GpuFuture;
 use vulkano::{
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{BufferCopy, CopyBufferInfo},
@@ -21,6 +22,8 @@ use vulkano::{
 };
 
 use crate::boilerplate::BaseGpuState;
+
+pub mod point_render_nr;
 
 // ok so we can't have rigid bodies in special relativity
 // the easiest approach would be to only use point particles
@@ -50,11 +53,12 @@ use crate::boilerplate::BaseGpuState;
 // (constrain w/surviving edges to prevent concave shapes from convexifying)
 // we'll also have point-based rendering, for debugging purposes
 
+// TODO replace with SoftbodyState
 pub struct SoftbodyRegistry {
     pub bodies: Vec<SoftbodyModel>,
 }
 
-// 52 bytes, not too bad
+// 56 bytes, not too bad
 #[derive(BufferContents, Debug)]
 #[repr(C)]
 pub struct Particle {
@@ -65,11 +69,21 @@ pub struct Particle {
     pub ground_pos: [f32; 2],
     pub ground_vel: [f32; 2],
     pub rest_mass: f32,
+    // which "object" is this particle part of
+    pub object_index: u32,
+}
+
+#[derive(BufferContents, Debug)]
+#[repr(C)]
+pub struct Object {
+    pub offset: u32,
+    pub material_index: u32,
 }
 
 // i guess we don't need much per-object state
 // since softbodies are just collections of point masses
 // well eventually we'll need materials i guess
+// TODO GET RID OF THIS & REPLACE W/SOFTBODY STATE
 pub struct SoftbodyModel {
     pub staging_buffer: Subbuffer<[Particle]>,
     pub gpu_buffer: Subbuffer<[Particle]>,
@@ -86,7 +100,6 @@ impl SoftbodyModel {
         let _ = staging_ptr;
 
         // cpu-gpu upload
-        use vulkano::sync::GpuFuture;
         let mut cbuf_builder = base.create_primary_command_buffer();
         cbuf_builder
             .copy_buffer(CopyBufferInfo {
@@ -157,7 +170,11 @@ fn allocate_and_upload_model(particles: &[Particle], base: &BaseGpuState) -> Sof
 // let's set an arbitrary resolution of 0.005 cs per pixel (200 particles per lightsecond)
 // please only feed this 8-bit depth RGB images cause everything else will fail
 // is BLOCKING ON GPU ACTIONS
-pub fn image_to_softbody<R: std::io::Read>(r: R, base: &BaseGpuState) -> SoftbodyModel {
+pub fn image_to_softbody<R: std::io::Read>(
+    r: R,
+    base: &BaseGpuState,
+    object_index: u32,
+) -> SoftbodyModel {
     let decoder = png::Decoder::new(r);
     let mut reader = decoder.read_info().unwrap();
     let mut buf = vec![0; reader.output_buffer_size()];
@@ -179,6 +196,7 @@ pub fn image_to_softbody<R: std::io::Read>(r: R, base: &BaseGpuState) -> Softbod
                 ground_pos: [pos.0 as f32 * 0.005, pos.1 as f32 * 0.005],
                 ground_vel: [0.0, 0.0],
                 rest_mass: 0.0,
+                object_index,
             });
             particle_map.insert(pos, particles.len() - 1);
         }
@@ -216,11 +234,280 @@ pub fn image_to_softbody<R: std::io::Read>(r: R, base: &BaseGpuState) -> Softbod
 //     //
 // }
 
-// particles <==> rk4
-// particles ===> worldspace mesh ===> ring buffer
+pub struct SoftbodyState {
+    // read back after each rk4 + culling
+    particles: Vec<Particle>,
+    objects: Vec<Object>, // fixed at 8192, since it's a uniform buffer
+
+    // euler/rk4
+    particle_staging: Subbuffer<[Particle]>,
+    particle_buf: Subbuffer<[Particle]>,
+    particle_buf_intermediate1: Subbuffer<[Particle]>,
+    particle_buf_intermediate2: Subbuffer<[Particle]>,
+    forcesum: Subbuffer<[f32]>,
+
+    // objects
+    object_staging: Subbuffer<[Object]>,
+    object_buf: Subbuffer<[Object]>,
+    // collision
+
+    // culling/meshing/render
+}
+
+// all of the functions defined here block on their gpu ops
+impl SoftbodyState {
+    // (how much should be allocated)
+    const MAX_OBJECTS: u64 = 8192; // 2^16 bytes
+    const MAX_PARTICLES: u64 = 2 >> 20;
+    pub fn create(base: &BaseGpuState) -> Self {
+        let particle_staging = Buffer::new_slice::<Particle>(
+            base.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::TRANSFER_SRC,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            Self::MAX_PARTICLES,
+        )
+        .unwrap();
+        let particle_buf = Buffer::new_slice::<Particle>(
+            base.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::TRANSFER_DST
+                    | BufferUsage::VERTEX_BUFFER
+                    | BufferUsage::STORAGE_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+                ..Default::default()
+            },
+            Self::MAX_PARTICLES,
+        )
+        .unwrap();
+        let particle_buf_intermediate1 = Buffer::new_slice::<Particle>(
+            base.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::TRANSFER_DST
+                    | BufferUsage::VERTEX_BUFFER
+                    | BufferUsage::STORAGE_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+                ..Default::default()
+            },
+            Self::MAX_PARTICLES,
+        )
+        .unwrap();
+        let particle_buf_intermediate2 = Buffer::new_slice::<Particle>(
+            base.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::TRANSFER_DST
+                    | BufferUsage::VERTEX_BUFFER
+                    | BufferUsage::STORAGE_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+                ..Default::default()
+            },
+            Self::MAX_PARTICLES,
+        )
+        .unwrap();
+        let forcesum = Buffer::new_slice::<f32>(
+            base.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::TRANSFER_DST
+                    | BufferUsage::VERTEX_BUFFER
+                    | BufferUsage::STORAGE_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+                ..Default::default()
+            },
+            Self::MAX_PARTICLES,
+        )
+        .unwrap();
+        let object_staging = Buffer::new_slice::<Object>(
+            base.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::TRANSFER_SRC,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            Self::MAX_PARTICLES,
+        )
+        .unwrap();
+        let object_buf = Buffer::new_slice::<Object>(
+            base.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::TRANSFER_DST
+                    | BufferUsage::VERTEX_BUFFER
+                    | BufferUsage::STORAGE_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+                ..Default::default()
+            },
+            Self::MAX_PARTICLES,
+        )
+        .unwrap();
+        Self {
+            particles: vec![],
+            objects: vec![],
+            particle_staging,
+            particle_buf,
+            particle_buf_intermediate1,
+            particle_buf_intermediate2,
+            forcesum,
+            object_staging,
+            object_buf,
+        }
+    }
+    pub fn push(&self, base: &BaseGpuState) {
+        let particle_staging_ptr =
+            self.particle_staging.mapped_slice().unwrap().as_ptr() as *mut Particle;
+        let object_staging_ptr =
+            self.object_staging.mapped_slice().unwrap().as_ptr() as *mut Object;
+        unsafe {
+            std::ptr::copy(
+                self.particles.as_ptr(),
+                particle_staging_ptr,
+                self.particles.len(),
+            );
+            std::ptr::copy(
+                self.objects.as_ptr(),
+                object_staging_ptr,
+                self.objects.len(),
+            );
+        }
+        let _ = particle_staging_ptr;
+        let _ = object_staging_ptr;
+
+        let mut cbuf_builder = base.create_primary_command_buffer();
+        cbuf_builder
+            .copy_buffer(CopyBufferInfo {
+                regions: SmallVec::from_buf([BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size: (self.particles.len() * size_of::<Particle>()) as u64,
+                    ..Default::default()
+                }]),
+                ..CopyBufferInfo::buffers(
+                    self.particle_staging.as_bytes().clone(),
+                    self.particle_buf.as_bytes().clone(),
+                )
+            })
+            .unwrap()
+            .copy_buffer(CopyBufferInfo {
+                regions: SmallVec::from_buf([BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size: (self.objects.len() * size_of::<Object>()) as u64,
+                    ..Default::default()
+                }]),
+                ..CopyBufferInfo::buffers(
+                    self.object_staging.as_bytes().clone(),
+                    self.object_buf.as_bytes().clone(),
+                )
+            })
+            .unwrap();
+        let cbuf = cbuf_builder.build().unwrap();
+        vulkano::sync::now(base.device.clone())
+            .then_execute(base.queue.clone(), cbuf)
+            .unwrap()
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .wait(None)
+            .unwrap();
+    }
+    pub fn dispatch_euler(&self, base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) {}
+    pub fn dispatch_rk4(&self, base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) {
+        todo!()
+    }
+    pub fn update_collision_grid(&self, base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) {
+        todo!()
+    }
+    pub fn cull_meshes(&self, base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) {
+        todo!()
+    }
+
+    // there should be exactly as many particles in self.particles as in the gpu buffer
+    // (no new particles are being created, hopefully)
+    pub fn pull(&mut self, base: &BaseGpuState) {
+        let mut cbuf_builder = base.create_primary_command_buffer();
+        cbuf_builder
+            .copy_buffer(CopyBufferInfo {
+                regions: SmallVec::from_buf([BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size: (self.particles.len() * size_of::<Particle>()) as u64,
+                    ..Default::default()
+                }]),
+                ..CopyBufferInfo::buffers(
+                    self.particle_buf.as_bytes().clone(),
+                    self.particle_staging.as_bytes().clone(),
+                )
+            })
+            .unwrap()
+            .copy_buffer(CopyBufferInfo {
+                regions: SmallVec::from_buf([BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size: (self.objects.len() * size_of::<Object>()) as u64,
+                    ..Default::default()
+                }]),
+                ..CopyBufferInfo::buffers(
+                    self.object_buf.as_bytes().clone(),
+                    self.object_staging.as_bytes().clone(),
+                )
+            })
+            .unwrap();
+        let cbuf = cbuf_builder.build().unwrap();
+        vulkano::sync::now(base.device.clone())
+            .then_execute(base.queue.clone(), cbuf)
+            .unwrap()
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .wait(None)
+            .unwrap();
+        let particle_staging_ptr =
+            self.particle_staging.mapped_slice().unwrap().as_ptr() as *const Particle;
+        let object_staging_ptr =
+            self.object_staging.mapped_slice().unwrap().as_ptr() as *const Object;
+        unsafe {
+            std::ptr::copy(
+                particle_staging_ptr,
+                self.particles.as_mut_ptr(),
+                self.particles.len(),
+            );
+            std::ptr::copy(
+                object_staging_ptr,
+                self.objects.as_mut_ptr(),
+                self.objects.len(),
+            );
+        }
+        let _ = particle_staging_ptr;
+        let _ = object_staging_ptr;
+    }
+}
 
 pub struct SoftbodyComputePipelines {
-    set_layout: Arc<DescriptorSetLayout>,
+    rk4_set_layout: Arc<DescriptorSetLayout>,
+    // collision_grid_set_layout: Arc<DescriptorSetLayout>,
+    objects_set_layout: Arc<DescriptorSetLayout>,
+
     // pipeline layout (same for each of these pipelines lol)
     pipeline_layout: Arc<PipelineLayout>,
     // euler
@@ -231,10 +518,12 @@ pub struct SoftbodyComputePipelines {
     rk4_2: Arc<ComputePipeline>,
     rk4_3: Arc<ComputePipeline>,
     rk4_4: Arc<ComputePipeline>,
+    // collision (w/another pipeline layout)
+    // (TODO)
 }
 
 pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyComputePipelines {
-    let set_layout = DescriptorSetLayout::new(
+    let rk4_set_layout = DescriptorSetLayout::new(
         base.device.clone(),
         DescriptorSetLayoutCreateInfo {
             bindings: {
@@ -253,6 +542,22 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         },
     )
     .unwrap();
+    let objects_set_layout = DescriptorSetLayout::new(
+        base.device.clone(),
+        DescriptorSetLayoutCreateInfo {
+            bindings: {
+                let binding = DescriptorSetLayoutBinding {
+                    stages: ShaderStages::COMPUTE,
+                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer)
+                };
+                let mut tree = BTreeMap::new();
+                tree.insert(0, binding);
+                tree
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
     let pipeline_layout = PipelineLayout::new(
         base.device.clone(),
         PipelineLayoutCreateInfo {
@@ -261,12 +566,13 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
                 offset: 0,
                 size: 4,
             }],
-            set_layouts: vec![set_layout.clone()],
+            set_layouts: vec![rk4_set_layout.clone()],
             ..Default::default()
         },
     )
     .unwrap();
     let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.set_include_callback(super::include_callback);
     opts.add_macro_definition("EULER", None);
     let shader = base
         .shader_loader
@@ -300,6 +606,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     )
     .unwrap();
     let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.set_include_callback(super::include_callback);
     opts.add_macro_definition("RK4STAGE_0", None);
     let shader = base
         .shader_loader
@@ -333,6 +640,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     )
     .unwrap();
     let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.set_include_callback(super::include_callback);
     opts.add_macro_definition("RK4STAGE_1", None);
     let shader = base
         .shader_loader
@@ -366,6 +674,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     )
     .unwrap();
     let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.set_include_callback(super::include_callback);
     opts.add_macro_definition("RK4STAGE_2", None);
     let shader = base
         .shader_loader
@@ -399,6 +708,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     )
     .unwrap();
     let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.set_include_callback(super::include_callback);
     opts.add_macro_definition("RK4STAGE_3", None);
     let shader = base
         .shader_loader
@@ -432,6 +742,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     )
     .unwrap();
     let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.set_include_callback(super::include_callback);
     opts.add_macro_definition("RK4STAGE_4", None);
     let shader = base
         .shader_loader
@@ -466,7 +777,8 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
 
     SoftbodyComputePipelines {
-        set_layout,
+        rk4_set_layout,
+        objects_set_layout,
         pipeline_layout,
         euler,
         rk4_0,
