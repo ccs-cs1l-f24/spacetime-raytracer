@@ -137,7 +137,7 @@ vec2 get_forces() {
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;
         vec2 forces = get_forces();
-        force_acc[index] += forces;
+        force_acc[index] = forces;
         vec2 new_vel = original_particles[index].ground_vel + forces * h / 2.0;
         out_particles[index].ground_vel = new_vel;
         out_particles[index].ground_pos = original_particles[index].ground_pos + new_vel * h / 2.0;
@@ -175,6 +175,7 @@ vec2 get_forces() {
 #endif
 #ifdef RK4STAGE_4
     void main() { // relies on original, out, force_acc
+        Object o = objects[0]; // to stop vulkano from complaining about an unused descset binding
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;
         vec2 forces = force_acc[index];

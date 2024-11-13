@@ -175,6 +175,7 @@ pub struct SoftbodyState {
     particle_buf: Subbuffer<[Particle]>,
     particle_buf_intermediate1: Subbuffer<[Particle]>,
     particle_buf_intermediate2: Subbuffer<[Particle]>,
+    #[allow(unused)]
     forcesum: Subbuffer<[f32]>,
 
     euler_ds: Arc<PersistentDescriptorSet>,
@@ -232,7 +233,7 @@ impl SoftbodyState {
         let particle_buf_intermediate1 = Buffer::new_slice::<Particle>(
             base.memory_allocator.clone(),
             BufferCreateInfo {
-                usage: BufferUsage::STORAGE_BUFFER,
+                usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
                 ..Default::default()
             },
             AllocationCreateInfo {
@@ -245,7 +246,7 @@ impl SoftbodyState {
         let particle_buf_intermediate2 = Buffer::new_slice::<Particle>(
             base.memory_allocator.clone(),
             BufferCreateInfo {
-                usage: BufferUsage::STORAGE_BUFFER,
+                usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
                 ..Default::default()
             },
             AllocationCreateInfo {
@@ -424,6 +425,32 @@ impl SoftbodyState {
                 regions: SmallVec::from_buf([BufferCopy {
                     src_offset: 0,
                     dst_offset: 0,
+                    size: (self.particles.len() * size_of::<Particle>()) as u64,
+                    ..Default::default()
+                }]),
+                ..CopyBufferInfo::buffers(
+                    self.particle_staging.as_bytes().clone(),
+                    self.particle_buf_intermediate1.as_bytes().clone(),
+                )
+            })
+            .unwrap()
+            .copy_buffer(CopyBufferInfo {
+                regions: SmallVec::from_buf([BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size: (self.particles.len() * size_of::<Particle>()) as u64,
+                    ..Default::default()
+                }]),
+                ..CopyBufferInfo::buffers(
+                    self.particle_staging.as_bytes().clone(),
+                    self.particle_buf_intermediate2.as_bytes().clone(),
+                )
+            })
+            .unwrap()
+            .copy_buffer(CopyBufferInfo {
+                regions: SmallVec::from_buf([BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
                     size: (self.objects.len() * size_of::<Object>()) as u64,
                     ..Default::default()
                 }]),
@@ -460,6 +487,7 @@ impl SoftbodyState {
             .boxed()
     }
 
+    #[allow(unused)]
     fn dispatch_euler(
         &self,
         pipelines: &SoftbodyComputePipelines,
@@ -501,7 +529,7 @@ impl SoftbodyState {
         debug_cfg: &HotswapConfig,
     ) {
         cmd_buf
-            .bind_pipeline_compute(pipelines.euler.clone())
+            .bind_pipeline_compute(pipelines.rk4_0.clone())
             .unwrap()
             .push_constants(
                 pipelines.pipeline_layout.clone(),
@@ -526,6 +554,8 @@ impl SoftbodyState {
             .unwrap()
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
             .unwrap()
+            .bind_pipeline_compute(pipelines.rk4_1.clone())
+            .unwrap()
             .bind_descriptor_sets(
                 PipelineBindPoint::Compute,
                 pipelines.pipeline_layout.clone(),
@@ -534,6 +564,8 @@ impl SoftbodyState {
             )
             .unwrap()
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
+            .unwrap()
+            .bind_pipeline_compute(pipelines.rk4_2.clone())
             .unwrap()
             .bind_descriptor_sets(
                 PipelineBindPoint::Compute,
@@ -544,6 +576,8 @@ impl SoftbodyState {
             .unwrap()
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
             .unwrap()
+            .bind_pipeline_compute(pipelines.rk4_3.clone())
+            .unwrap()
             .bind_descriptor_sets(
                 PipelineBindPoint::Compute,
                 pipelines.pipeline_layout.clone(),
@@ -552,6 +586,8 @@ impl SoftbodyState {
             )
             .unwrap()
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
+            .unwrap()
+            .bind_pipeline_compute(pipelines.rk4_4.clone())
             .unwrap()
             .bind_descriptor_sets(
                 PipelineBindPoint::Compute,
@@ -574,62 +610,62 @@ impl SoftbodyState {
     // there should be exactly as many particles in self.particles as in the gpu buffer
     // (no new particles are being created, hopefully)
     // BLOCKS on gpu download
-    pub fn pull(&mut self, base: &BaseGpuState) {
-        let mut cbuf_builder = base.create_primary_command_buffer();
-        cbuf_builder
-            .copy_buffer(CopyBufferInfo {
-                regions: SmallVec::from_buf([BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 0,
-                    size: (self.particles.len() * size_of::<Particle>()) as u64,
-                    ..Default::default()
-                }]),
-                ..CopyBufferInfo::buffers(
-                    self.particle_buf.as_bytes().clone(),
-                    self.particle_staging.as_bytes().clone(),
-                )
-            })
-            .unwrap()
-            .copy_buffer(CopyBufferInfo {
-                regions: SmallVec::from_buf([BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 0,
-                    size: (self.objects.len() * size_of::<Object>()) as u64,
-                    ..Default::default()
-                }]),
-                ..CopyBufferInfo::buffers(
-                    self.object_buf.as_bytes().clone(),
-                    self.object_staging.as_bytes().clone(),
-                )
-            })
-            .unwrap();
-        let cbuf = cbuf_builder.build().unwrap();
-        vulkano::sync::now(base.device.clone())
-            .then_execute(base.queue.clone(), cbuf)
-            .unwrap()
-            .then_signal_fence_and_flush()
-            .unwrap()
-            .wait(None)
-            .unwrap();
-        let particle_staging_ptr =
-            self.particle_staging.mapped_slice().unwrap().as_ptr() as *const Particle;
-        let object_staging_ptr =
-            self.object_staging.mapped_slice().unwrap().as_ptr() as *const Object;
-        unsafe {
-            std::ptr::copy(
-                particle_staging_ptr,
-                self.particles.as_mut_ptr(),
-                self.particles.len(),
-            );
-            std::ptr::copy(
-                object_staging_ptr,
-                self.objects.as_mut_ptr(),
-                self.objects.len(),
-            );
-        }
-        let _ = particle_staging_ptr;
-        let _ = object_staging_ptr;
-    }
+    // pub fn pull(&mut self, base: &BaseGpuState) {
+    //     let mut cbuf_builder = base.create_primary_command_buffer();
+    //     cbuf_builder
+    //         .copy_buffer(CopyBufferInfo {
+    //             regions: SmallVec::from_buf([BufferCopy {
+    //                 src_offset: 0,
+    //                 dst_offset: 0,
+    //                 size: (self.particles.len() * size_of::<Particle>()) as u64,
+    //                 ..Default::default()
+    //             }]),
+    //             ..CopyBufferInfo::buffers(
+    //                 self.particle_buf.as_bytes().clone(),
+    //                 self.particle_staging.as_bytes().clone(),
+    //             )
+    //         })
+    //         .unwrap()
+    //         .copy_buffer(CopyBufferInfo {
+    //             regions: SmallVec::from_buf([BufferCopy {
+    //                 src_offset: 0,
+    //                 dst_offset: 0,
+    //                 size: (self.objects.len() * size_of::<Object>()) as u64,
+    //                 ..Default::default()
+    //             }]),
+    //             ..CopyBufferInfo::buffers(
+    //                 self.object_buf.as_bytes().clone(),
+    //                 self.object_staging.as_bytes().clone(),
+    //             )
+    //         })
+    //         .unwrap();
+    //     let cbuf = cbuf_builder.build().unwrap();
+    //     vulkano::sync::now(base.device.clone())
+    //         .then_execute(base.queue.clone(), cbuf)
+    //         .unwrap()
+    //         .then_signal_fence_and_flush()
+    //         .unwrap()
+    //         .wait(None)
+    //         .unwrap();
+    //     let particle_staging_ptr =
+    //         self.particle_staging.mapped_slice().unwrap().as_ptr() as *const Particle;
+    //     let object_staging_ptr =
+    //         self.object_staging.mapped_slice().unwrap().as_ptr() as *const Object;
+    //     unsafe {
+    //         std::ptr::copy(
+    //             particle_staging_ptr,
+    //             self.particles.as_mut_ptr(),
+    //             self.particles.len(),
+    //         );
+    //         std::ptr::copy(
+    //             object_staging_ptr,
+    //             self.objects.as_mut_ptr(),
+    //             self.objects.len(),
+    //         );
+    //     }
+    //     let _ = particle_staging_ptr;
+    //     let _ = object_staging_ptr;
+    // }
 
     // note that this function does NOT invoke push
     pub fn add_particles(&mut self, other: &mut Vec<Particle>, object: Object) {
