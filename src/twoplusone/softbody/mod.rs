@@ -180,10 +180,6 @@ pub fn image_to_softbody<R: std::io::Read>(
     particles
 }
 
-// pub struct CollisionGrid {
-//     //
-// }
-
 pub struct SoftbodyState {
     // read back after each rk4 + culling
     particles: Vec<Particle>,
@@ -191,7 +187,7 @@ pub struct SoftbodyState {
 
     // rk4 buffers & descsets
     particle_staging: Subbuffer<[Particle]>,
-    particle_buf: Subbuffer<[Particle]>, // also used by the collision grid descsetl
+    particle_buf: Subbuffer<[Particle]>, // also used by the collision grid descset
     particle_buf_intermediate1: Subbuffer<[Particle]>,
     particle_buf_intermediate2: Subbuffer<[Particle]>,
     #[allow(unused)]
@@ -214,7 +210,6 @@ pub struct SoftbodyState {
     #[allow(unused)]
     start_indices: Subbuffer<[u32]>,
     collision_update_ds: Arc<PersistentDescriptorSet>, // also used by the rk4 pipeline
-                                                       // culling/meshing/render
 }
 
 impl SoftbodyState {
@@ -545,18 +540,8 @@ impl SoftbodyState {
             cmd_buf
                 .write_timestamp(
                     base.query_pool.clone(),
-                    crate::querybank::RK4_BEFORE,
+                    crate::querybank::TOP_OF_PHYSICS,
                     PipelineStage::TopOfPipe,
-                )
-                .unwrap();
-        }
-        self.dispatch_rk4(pipelines, &mut cmd_buf);
-        unsafe {
-            cmd_buf
-                .write_timestamp(
-                    base.query_pool.clone(),
-                    crate::querybank::RK4_AFTER,
-                    PipelineStage::AllCommands,
                 )
                 .unwrap();
         }
@@ -566,6 +551,16 @@ impl SoftbodyState {
                 .write_timestamp(
                     base.query_pool.clone(),
                     crate::querybank::GRID_UPDATE_AFTER,
+                    PipelineStage::AllCommands,
+                )
+                .unwrap();
+        }
+        self.dispatch_rk4(pipelines, &mut cmd_buf);
+        unsafe {
+            cmd_buf
+                .write_timestamp(
+                    base.query_pool.clone(),
+                    crate::querybank::RK4_AFTER,
                     PipelineStage::AllCommands,
                 )
                 .unwrap();
