@@ -143,6 +143,10 @@ impl winit::application::ApplicationHandler for App {
                 recreate_swapchain: false,
             };
             self.init_state = Some(init_state);
+
+            // initialization doesn't count as the first frame!!
+            // this way the 0.1% lows aren't thrown off quite so badly :)
+            self.prev_frame_start = Instant::now();
         }
     }
 
