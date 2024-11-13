@@ -35,6 +35,11 @@ struct InitState {
     // simulation/game state + buffers/descriptor sets
     world: twoplusone::World,
 
+    // unlike render ops, we can only have one physics op in flight at once
+    // since each one depends on the previous
+    // so we take and block on it before submitting the next frame's render op
+    in_flight_physics: Option<Box<dyn vulkano::sync::GpuFuture>>,
+
     // checked and reset at the start of each frame render
     // used so that "suboptimal" presents don't delay a frame unnecessarily with swapchain recreation
     recreate_swapchain: bool,
@@ -120,6 +125,7 @@ impl winit::application::ApplicationHandler for App {
                 debug_ui_state,
                 pipeline_manager,
                 world,
+                in_flight_physics: None,
                 recreate_swapchain: false,
             };
             self.init_state = Some(init_state);
@@ -172,6 +178,7 @@ impl winit::application::ApplicationHandler for App {
                     debug_ui_state,
                     pipeline_manager,
                     world,
+                    in_flight_physics,
                     recreate_swapchain,
                 }) = &mut self.init_state
                 {
@@ -204,10 +211,26 @@ impl winit::application::ApplicationHandler for App {
                         // don't delay this frame by recreating the swapchain, do it later
                         *recreate_swapchain = true;
                     }
+
+                    // TEMPORARY 
+                    // this would otherwise be put after the render submission, to avoid wasting time idling
+                    // but we put it here because points_norel uses softbody state's particle buf
+                    // and surely that frame would be done now RIGHT??
+                    *in_flight_physics =
+                        Some(world.softbody_state.submit_per_frame_compute(
+                            &base_gpu,
+                            &pipeline_manager.softbody_compute,
+                        ));
+                    // wait on the in-flight physics before composing/submitting the next render op
+                    if let Some(blocking_physics) = in_flight_physics.take() {
+                        blocking_physics
+                            .then_signal_fence_and_flush()
+                            .unwrap()
+                            .wait(None)
+                            .unwrap();
+                    }
+
                     let mut cmd_buf = base_gpu.create_primary_command_buffer();
-                    world
-                        .softbody_state
-                        .dispatch_euler(&pipeline_manager.softbody_compute, &mut cmd_buf);
                     twoplusone::softbody::point_render_nr::render(
                         present_image_index,
                         main_window.inner_size().width as f32
@@ -219,16 +242,16 @@ impl winit::application::ApplicationHandler for App {
                         &pipeline_manager.point_pipelines,
                     );
                     let cmd_buf = cmd_buf.build().unwrap();
-                    let mut prev_frame_future = base_gpu
+                    let mut prev_frame_in_flight_future = base_gpu
                         .swapchain_manager
                         .take_frame_in_flight_future(present_image_index);
                     // make sure to clean up the fences
-                    prev_frame_future.cleanup_finished();
+                    prev_frame_in_flight_future.cleanup_finished();
 
                     // import this otherwise i can't build the future :P
                     use vulkano::sync::GpuFuture;
                     // this future does the scene rendering
-                    let future = prev_frame_future
+                    let future = prev_frame_in_flight_future
                         .join(present_image_acquire_future)
                         .then_execute(base_gpu.queue.clone(), cmd_buf)
                         .unwrap();
@@ -259,6 +282,13 @@ impl winit::application::ApplicationHandler for App {
                             panic!("Failed to flush the main render future; {:?}", e);
                         }
                     }
+
+                    // // submit the physics for the next frame :)
+                    // *in_flight_physics =
+                    //     Some(world.softbody_state.submit_per_frame_compute(
+                    //         &base_gpu,
+                    //         &pipeline_manager.softbody_compute,
+                    //     ));
                 } else {
                     unreachable!("Init state really must exist by now")
                 }
