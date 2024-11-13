@@ -304,11 +304,12 @@ impl winit::application::ApplicationHandler for App {
                     main_window.pre_present_notify(); // we've submitted a render op, let's notify them :)
 
                     // submit the physics for the next frame :)
-                    *in_flight_physics =
-                        Some(world.softbody_state.submit_per_frame_compute(
+                    if !self.keyboard.pause {
+                        *in_flight_physics = Some(world.softbody_state.submit_per_frame_compute(
                             &base_gpu,
                             &pipeline_manager.softbody_compute,
                         ));
+                    }
                 } else {
                     unreachable!("Init state really must exist by now")
                 }

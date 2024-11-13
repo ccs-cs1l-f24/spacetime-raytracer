@@ -8,6 +8,7 @@ pub struct Keyboard {
     pub right: bool,
     pub z: bool,
     pub x: bool,
+    pub pause: bool,
 }
 
 impl Keyboard {
@@ -32,6 +33,7 @@ impl Keyboard {
                 "d" => self.right = state,
                 "z" => self.z = state,
                 "x" => self.x = state,
+                "p" => if state { self.pause = !self.pause },
                 _ => {}
             }
         }
