@@ -86,7 +86,9 @@ impl winit::application::ApplicationHandler for App {
                         requested_resume + state.debug_ui_state.config.fps_duration()
                     },
                 ));
-                state.debug_ui_state.time_since_last_frame = self.prev_frame_start.elapsed();
+                state
+                    .debug_ui_state
+                    .add_frame_time(self.prev_frame_start.elapsed());
                 state.world.update_camera(
                     &self.keyboard,
                     self.prev_frame_start.elapsed().as_secs_f32(),

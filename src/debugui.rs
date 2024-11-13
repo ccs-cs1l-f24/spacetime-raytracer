@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{collections::VecDeque, sync::Arc, time::Duration};
 
 use vulkano::{image::view::ImageView, sync::GpuFuture};
 
@@ -33,13 +33,23 @@ pub struct DebugUiState {
 
     // data used to compose the gui
     // TODO average / 1% / 0.1%
-    pub time_since_last_frame: std::time::Duration,
+    frame_times: VecDeque<Duration>,
+    sorted_frame_times: Vec<Duration>,
 
     // internal state
     max_fps_input: String,
 }
 
 impl DebugUiState {
+    pub fn add_frame_time(&mut self, time: Duration) {
+        self.frame_times.push_back(time);
+        if self.frame_times.len() > 2000 {
+            self.frame_times.pop_front();
+        }
+        self.sorted_frame_times = self.frame_times.iter().cloned().collect();
+        self.sorted_frame_times.sort();
+    }
+
     // call before each render attempt
     pub fn start_gui(&mut self, perf: FramePerfStats) {
         self.gui.immediate_ui(|gui| {
@@ -53,8 +63,21 @@ impl DebugUiState {
                 .show(&ctx, |ui| {
                     ui.heading("Profiling");
                     ui.label(format!(
-                        "Current FPS: {}",
-                        (1000000.0 / self.time_since_last_frame.as_micros() as f32).ceil() as u64
+                        "Frame Duration Minimum: {:?}",
+                        self.config.fps_duration()
+                    ));
+                    ui.label(format!(
+                        // there is guaranteed to be at least one element in self.frame_times and self.sorted_frame_times
+                        "Last Frame Time: {:?}\nAverage: {:?}\n1% low: {:?}\n0.1% low: {:?}",
+                        self.frame_times.back().unwrap(),
+                        self.frame_times
+                            .range(self.sorted_frame_times.len().checked_sub(50).unwrap_or(0)..)
+                            .sum::<Duration>()
+                            / 50.min(self.sorted_frame_times.len() as u32),
+                        self.sorted_frame_times[self.sorted_frame_times.len()
+                            - self.sorted_frame_times.len() / 100
+                            - 1],
+                        self.sorted_frame_times.last().unwrap(),
                     ));
                     ui.label(format!("{}", perf));
                     ui.separator();
@@ -119,10 +142,13 @@ pub fn create_debug_ui_state(
             samples: vulkano::image::SampleCount::Sample1,
         },
     );
+    let mut frame_times = VecDeque::new();
+    frame_times.push_back(Duration::new(0, 0));
     DebugUiState {
         gui,
         config: Default::default(),
-        time_since_last_frame: Default::default(),
+        frame_times,
+        sorted_frame_times: vec![Duration::new(0, 0)],
         max_fps_input: Default::default(),
     }
 }
