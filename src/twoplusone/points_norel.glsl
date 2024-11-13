@@ -15,8 +15,8 @@
 
     void main() {
         // gl_Position = vec4(float(gl_VertexIndex)/10.0, 0.0, 0.0, 1.0);
-        gl_Position = vec4(pos, 0.0, 1.0);
-        gl_PointSize = 2.0;
+        gl_Position = vec4(worldspaceToScreenspace * pos, 0.0, 1.0);
+        gl_PointSize = 1.0;
     }
 
 #endif

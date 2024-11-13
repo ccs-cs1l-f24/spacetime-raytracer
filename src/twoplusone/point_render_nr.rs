@@ -166,7 +166,7 @@ pub fn create_point_render_pipelines(base: &BaseGpuState) -> PointRenderPipeline
                 .bindings([(
                     0,
                     VertexInputBindingDescription {
-                        stride: std::mem::size_of::<super::softbody::Particle>() as u32,
+                        stride: size_of::<super::softbody::Particle>() as u32,
                         input_rate: VertexInputRate::Vertex,
                     },
                 )]),

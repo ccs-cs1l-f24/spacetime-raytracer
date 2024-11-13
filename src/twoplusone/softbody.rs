@@ -65,6 +65,14 @@ pub struct SoftbodyModel {
 impl SoftbodyModel {
     // BLOCKS on the upload
     fn upload(&self, particles: &[Particle], base: &BaseGpuState) {
+        // cpu copy
+        let staging_ptr = self.staging_buffer.mapped_slice().unwrap().as_ptr() as *mut Particle;
+        unsafe {
+            std::ptr::copy(particles.as_ptr(), staging_ptr, particles.len());
+        }
+        let _ = staging_ptr;
+
+        // cpu-gpu upload
         use vulkano::sync::GpuFuture;
         let mut cbuf_builder = base.create_primary_command_buffer();
         cbuf_builder
@@ -106,7 +114,7 @@ fn allocate_and_upload_model(particles: &[Particle], base: &BaseGpuState) -> Sof
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        (particles.len() * size_of::<Particle>()) as u64,
+        particles.len() as u64,
     )
     .unwrap();
     let gpu_buffer = Buffer::new_slice::<Particle>(
@@ -121,7 +129,7 @@ fn allocate_and_upload_model(particles: &[Particle], base: &BaseGpuState) -> Sof
             memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
             ..Default::default()
         },
-        (particles.len() * size_of::<Particle>()) as u64,
+        particles.len() as u64,
     )
     .unwrap();
     let model = SoftbodyModel {

@@ -85,7 +85,7 @@ impl DebugUiState {
                     });
                     ui.horizontal(|ui| {
                         ui.label("Zoom");
-                        ui.add(egui::Slider::new(&mut self.config.scale, 1.0..=10.0));
+                        ui.add(egui::Slider::new(&mut self.config.scale, 0.1..=2.0));
                     });
                 });
         })
