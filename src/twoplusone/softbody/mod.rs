@@ -508,7 +508,7 @@ impl SoftbodyState {
                     immediate_neighbor_dist: 0.005,
                     diagonal_neighbor_dist: (0.005f32 * 0.005 + 0.005 * 0.005).sqrt(),
                     k: debug_cfg.k,
-                }
+                },
             )
             .unwrap()
             .bind_descriptor_sets(

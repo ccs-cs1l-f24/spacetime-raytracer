@@ -16,12 +16,12 @@
 
     layout(push_constant) uniform Info {
         vec2 worldspace_to_screenspace;
-        // vec2 camera_position;
+        vec2 camera_position;
     };
 
     void main() {
         // gl_Position = vec4(float(gl_VertexIndex)/10.0, 0.0, 0.0, 1.0);
-        gl_Position = vec4(worldspace_to_screenspace * pos, 0.0, 1.0);
+        gl_Position = vec4(worldspace_to_screenspace * (pos - camera_position), 0.0, 1.0);
         gl_PointSize = 1.0;
     }
 

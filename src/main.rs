@@ -240,6 +240,7 @@ impl winit::application::ApplicationHandler for App {
                         &mut cmd_buf,
                         &world.softbody_state,
                         &pipeline_manager.point_pipelines,
+                        [1.0, 1.0],
                     );
                     let cmd_buf = cmd_buf.build().unwrap();
                     let mut prev_frame_in_flight_future = base_gpu

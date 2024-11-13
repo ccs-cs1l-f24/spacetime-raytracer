@@ -35,6 +35,7 @@ pub fn render(
     cmd_buf: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
     softbodies: &super::SoftbodyState,
     point_render_pipelines: &PointRenderPipelines,
+    cam_pos: [f32; 2],
 ) {
     cmd_buf
         .begin_render_pass(
@@ -66,11 +67,15 @@ pub fn render(
                 [
                     debugcfg.scale.recip() * aspect_ratio.recip(),
                     debugcfg.scale.recip(),
+                    cam_pos[0],
+                    cam_pos[1],
                 ]
             } else {
                 [
                     debugcfg.scale.recip(),
                     debugcfg.scale.recip() * aspect_ratio,
+                    cam_pos[0],
+                    cam_pos[1],
                 ]
             },
         )
@@ -137,7 +142,7 @@ pub fn create_point_render_pipelines(base: &BaseGpuState) -> PointRenderPipeline
             push_constant_ranges: vec![PushConstantRange {
                 stages: ShaderStages::VERTEX,
                 offset: 0,
-                size: 8,
+                size: 16,
             }],
             set_layouts: vec![],
             ..Default::default()
