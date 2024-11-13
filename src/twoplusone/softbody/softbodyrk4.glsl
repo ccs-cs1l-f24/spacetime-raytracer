@@ -99,22 +99,7 @@ layout(push_constant) uniform Settings {
 //     return normalize(normal);
 // }
 
-// the forces icle) {
-//     vec2 normal = vec2(0.0);
-//     for (int i = 0; i < 4; i++) { // this loop should unroll... if there are performance issues i can manually unroll
-//         if (particle.immediate_neighbors[i] != -1) {
-//             Particle n = state_particles[particle.immediate_neighbors[i]];
-//             normal += particle.ground_pos - n.ground_pos;
-//         }
-//     }
-//     for (int i = 0; i < 4; i++) {
-//         if (particle.diagonal_neighbors[i] != -1) {
-//             Particle n = state_particles[particle.diagonal_neighbors[i]];
-//             normal += particle.ground_pos - n.ground_pos;
-//         }
-//     }
-//     return normalize(normal);
-// }applied to a particle are:
+// the forces applied to a particle are:
 // - springs
 // - collisions
 // - global forces (gravity?, wind?, etc)
@@ -123,6 +108,14 @@ vec2 get_forces() {
 
     Particle particle = state_particles[gl_GlobalInvocationID.x];
     vec2 forces = vec2(0.0, 0.0); // we accumulate forces here
+    if (particle.immediate_neighbors[0] == -1 &&
+        particle.immediate_neighbors[1] == -1 &&
+        particle.immediate_neighbors[2] == -1 &&
+        particle.immediate_neighbors[3] == -1 && 
+        particle.diagonal_neighbors[0] == -1 &&
+        particle.diagonal_neighbors[1] == -1 &&
+        particle.diagonal_neighbors[2] == -1 &&
+        particle.diagonal_neighbors[3] == -1) return vec2(0.0);
 
     // particle-particle collisions
     ivec2 cell_coord = ivec2(floor(particle.ground_pos / grid_resolution));
@@ -152,11 +145,7 @@ vec2 get_forces() {
         if (p2.ground_pos == particle.ground_pos) continue;
         vec2 d = particle.ground_pos - p2.ground_pos;
         if (length(d) < collision_distance) {
-            // TODO
-            // vec2 normal = get_surface_normal(particle);
-            // vec2 dv1 = length(particle.ground_vel) * normalize(p2.ground_vel) - particle.ground_vel;
             forces += normalize(d) * collision_repulsion_coefficient;
-            // forces += normalize(d) * collision_repulsion_coefficient / length(d);
         }
     } while (index < num_particles && spatial_lookup[index].x == spatial_lookup[index + 1].x);
 
@@ -185,6 +174,14 @@ vec2 get_forces() {
     return forces;
 }
 
+// the bonds get broken in rk4_4 but only for particles
+// particles_intermediate1 and particles_intermediate2 also need their bonds updated
+// so we call this in rk4_0 and rk4_1 to propagate the breaking
+void propagate_breaking(uint index) {
+    out_particles[index].immediate_neighbors = original_particles[index].immediate_neighbors;
+    out_particles[index].diagonal_neighbors = original_particles[index].diagonal_neighbors;
+}
+
 // euler (state_particles is original_particles)
 // more like rk1 amirite
 #ifdef EULER
@@ -192,9 +189,10 @@ vec2 get_forces() {
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;
         vec2 forces = get_forces();
-        vec2 acc = nr_acc(forces, original_particles[index].ground_vel, original_particles[index].rest_mass);
+        vec2 acc = r_acc(forces, original_particles[index].ground_vel, original_particles[index].rest_mass);
         out_particles[index].ground_vel += acc * h;
         out_particles[index].ground_pos += original_particles[index].ground_vel * h;
+        propagate_breaking(index);
     }
 #endif
 
@@ -205,10 +203,11 @@ vec2 get_forces() {
         if (index >= num_particles) return;
         vec2 forces = get_forces();
         force_acc[index] = forces;
-        vec2 acc = nr_acc(forces, original_particles[index].ground_vel, original_particles[index].rest_mass);
+        vec2 acc = r_acc(forces, original_particles[index].ground_vel, original_particles[index].rest_mass);
         vec2 new_vel = original_particles[index].ground_vel + acc * h / 2.0;
         out_particles[index].ground_vel = new_vel;
         out_particles[index].ground_pos = original_particles[index].ground_pos + new_vel * h / 2.0;
+        propagate_breaking(index);
     }
 #endif
 #ifdef RK4STAGE_1
@@ -217,10 +216,11 @@ vec2 get_forces() {
         if (index >= num_particles) return;
         vec2 forces = get_forces();
         force_acc[index] += forces * 2.0;
-        vec2 acc = nr_acc(forces, original_particles[index].ground_vel, original_particles[index].rest_mass);
+        vec2 acc = r_acc(forces, original_particles[index].ground_vel, original_particles[index].rest_mass);
         vec2 new_vel = original_particles[index].ground_vel + acc * h / 2.0;
         out_particles[index].ground_vel = new_vel;
         out_particles[index].ground_pos = original_particles[index].ground_pos + new_vel * h / 2.0;
+        propagate_breaking(index);
     }
 #endif
 #ifdef RK4STAGE_2
@@ -229,7 +229,7 @@ vec2 get_forces() {
         if (index >= num_particles) return;
         vec2 forces = get_forces();
         force_acc[index] += forces * 2.0;
-        vec2 acc = nr_acc(forces, original_particles[index].ground_vel, original_particles[index].rest_mass);
+        vec2 acc = r_acc(forces, original_particles[index].ground_vel, original_particles[index].rest_mass);
         vec2 new_vel = original_particles[index].ground_vel + acc * h;
         out_particles[index].ground_vel = new_vel;
         out_particles[index].ground_pos = original_particles[index].ground_pos + new_vel * h;
@@ -252,10 +252,38 @@ vec2 get_forces() {
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;
         vec2 forces = force_acc[index];
-        vec2 acc = nr_acc(forces, original_particles[index].ground_vel, original_particles[index].rest_mass);
+        vec2 acc = r_acc(forces, original_particles[index].ground_vel, original_particles[index].rest_mass);
         vec2 vel = original_particles[index].ground_vel + acc * h / 6.0;
+        // since timestamps aren't infinitely granular, acceleration can cause the velocity to be over c
+        // we correct for that here :D
+        if (length(vel) >= 1.0) vel = normalize(vel) * 0.99;
         out_particles[index].ground_vel = vel;
-        out_particles[index].ground_pos = original_particles[index].ground_pos + vel * h;
+        vec2 new_pos = original_particles[index].ground_pos + vel * h;
+        out_particles[index].ground_pos = new_pos;
         force_acc[index] = vec2(0.0);
+
+        // break bonds between particles that are too far apart
+        const float THRESHOLD = 0.015;
+        Particle p = original_particles[index];
+        for (int i = 0; i < 4; i++) {
+            if (p.immediate_neighbors[i] != -1) {
+                vec2 d = p.ground_pos - original_particles[p.immediate_neighbors[i]].ground_pos;
+                if (length(d) > THRESHOLD) {
+                    out_particles[index].immediate_neighbors[i] = -1;
+                    int j = i > 1 ? i - 2 : i + 2;
+                    out_particles[p.immediate_neighbors[i]].immediate_neighbors[j] = -1;
+                }
+            }
+        }
+        for (int i = 0; i < 4; i++) {
+            if (p.diagonal_neighbors[i] != -1) {
+                vec2 d = p.ground_pos - original_particles[p.diagonal_neighbors[i]].ground_pos;
+                if (length(d) > THRESHOLD) {
+                    out_particles[index].diagonal_neighbors[i] = -1;
+                    int j = 3 - i;
+                    out_particles[p.diagonal_neighbors[i]].diagonal_neighbors[j] = -1;
+                }
+            }
+        }
     }
 #endif

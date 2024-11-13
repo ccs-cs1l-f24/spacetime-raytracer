@@ -572,6 +572,7 @@ impl SoftbodyState {
     // unstable, strictly worse than rk4
     // well it probably is faster but not enough to justify the explosions
     #[allow(unused)]
+    #[allow(dependency_on_unit_never_type_fallback)]
     fn dispatch_euler(
         &self,
         pipelines: &SoftbodyComputePipelines,
@@ -583,18 +584,7 @@ impl SoftbodyState {
             .push_constants(
                 pipelines.rk4_pipeline_layout.clone(),
                 0,
-                Rk4PushConstants {
-                    // TODO make these more configurable
-                    // slash always correct
-                    num_particles: self.particles.len() as u32,
-                    h: 0.005,
-                    immediate_neighbor_dist: 0.0035,
-                    diagonal_neighbor_dist: (0.0035f32 * 0.0035 + 0.0035 * 0.0035).sqrt(),
-                    k: 17500.0,
-                    grid_resolution: 0.02,
-                    collision_distance: 0.0035,
-                    collision_repulsion_coefficient: 1000.0,
-                },
+                todo!(),
             )
             .unwrap()
             .bind_descriptor_sets(
@@ -630,10 +620,10 @@ impl SoftbodyState {
                     h: 0.005,
                     immediate_neighbor_dist: 0.0035,
                     diagonal_neighbor_dist: (0.0035f32 * 0.0035 + 0.0035 * 0.0035).sqrt(),
-                    k: 17500.0,
+                    k: 12500.0,
                     grid_resolution: 0.02,
                     collision_distance: 0.002,
-                    collision_repulsion_coefficient: 100.0,
+                    collision_repulsion_coefficient: 68.75,
                 },
             )
             .unwrap()
