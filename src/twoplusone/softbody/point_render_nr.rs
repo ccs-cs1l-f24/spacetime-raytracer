@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::Borrow, sync::Arc};
 
 use vulkano::{
     command_buffer::{
@@ -93,44 +93,33 @@ pub struct PointRenderPipelines {
     pub render_pipeline: Arc<GraphicsPipeline>,
 }
 
-pub fn create_point_render_pipelines(base: &BaseGpuState) -> PointRenderPipelines {
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.add_macro_definition("VERTEX_SHADER", None);
-    let vertex_shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("points_norel.glsl"),
-            shaderc::ShaderKind::DefaultVertex,
-            "points_norel_vert",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
+pub fn create_point_render_pipelines(base: &mut BaseGpuState) -> PointRenderPipelines {
+    base.register_cache("point_render_nr");
     let vertex_shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(vertex_shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/points_norel_VERTEX_SHADER.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
     .entry_point("main")
     .unwrap();
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.add_macro_definition("FRAGMENT_SHADER", None);
-    let fragment_shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("points_norel.glsl"),
-            shaderc::ShaderKind::DefaultFragment,
-            "points_norel_frag",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let fragment_shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(fragment_shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/points_norel_FRAGMENT_SHADER.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -192,8 +181,12 @@ pub fn create_point_render_pipelines(base: &BaseGpuState) -> PointRenderPipeline
         subpass: Some(base.rpass_manager.main_pass.subpass.clone().into()),
         ..GraphicsPipelineCreateInfo::layout(render_pipeline_layout.clone())
     };
-    let render_pipeline =
-        GraphicsPipeline::new(base.device.clone(), None, create_info.clone()).unwrap();
+    let render_pipeline = GraphicsPipeline::new(
+        base.device.clone(),
+        Some(base.get_cache("point_render_nr")),
+        create_info.clone(),
+    )
+    .unwrap();
     PointRenderPipelines {
         render_pipeline_layout,
         render_pipeline,

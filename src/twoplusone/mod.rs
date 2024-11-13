@@ -6,31 +6,13 @@ pub mod worldline;
 
 mod utils;
 
-fn include_callback(
-    requested_src: &str,
-    _: shaderc::IncludeType,
-    _: &str,
-    _: usize,
-) -> Result<shaderc::ResolvedInclude, String> {
-    let content = std::fs::read_to_string(
-        std::path::PathBuf::new()
-            .join("src")
-            .join("twoplusone")
-            .join(requested_src),
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(shaderc::ResolvedInclude {
-        content,
-        resolved_name: requested_src.to_string(),
-    })
-}
-
 pub struct PipelineManager {
     pub point_pipelines: softbody::point_render_nr::PointRenderPipelines,
     pub softbody_compute: softbody::SoftbodyComputePipelines,
 }
 
-pub fn create_pipeline_manager(base: &BaseGpuState) -> PipelineManager {
+// needs to take base mutably because it updates pipeline cache registry
+pub fn create_pipeline_manager(base: &mut BaseGpuState) -> PipelineManager {
     PipelineManager {
         point_pipelines: softbody::point_render_nr::create_point_render_pipelines(base),
         softbody_compute: softbody::create_softbody_compute_pipelines(base),

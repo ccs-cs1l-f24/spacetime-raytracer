@@ -123,18 +123,16 @@ impl winit::application::ApplicationHandler for App {
                     )
                     .unwrap(),
             );
-            let base_gpu = boilerplate::create_gpu_state(main_window.clone());
+            let mut base_gpu = boilerplate::create_gpu_state(main_window.clone());
             base_gpu.reset_query_pool(); // for some reason it doesn't start flushed
             log::debug!("Now we have a graphics context and window secured :D"); // many smiles here
             let debug_ui_state = debugui::create_debug_ui_state(event_loop, &base_gpu);
             log::debug!("Debug UI created :D");
-            let pipeline_manager = twoplusone::create_pipeline_manager(&base_gpu);
+            let pipeline_manager = twoplusone::create_pipeline_manager(&mut base_gpu); // mutates the pipeline cache registry
             log::debug!("Pipelines created :D");
             let world = twoplusone::create_world(&base_gpu, &pipeline_manager);
             log::debug!("World created :D");
-            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(
-                Instant::now() + debug_ui_state.config.fps_duration(),
-            ));
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(Instant::now()));
             let init_state = InitState {
                 main_window,
                 base_gpu,
@@ -299,6 +297,7 @@ impl winit::application::ApplicationHandler for App {
                             panic!("Failed to flush the main render future; {:?}", e);
                         }
                     }
+                    main_window.pre_present_notify(); // we've submitted a render op, let's notify them :)
 
                     // submit the physics for the next frame :)
                     *in_flight_physics =
@@ -323,6 +322,9 @@ impl winit::application::ApplicationHandler for App {
     fn exiting(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
         // destroy the vulkan context and assets before the window goes
         // can do other cleanup after the loop exits
+        if let Some(InitState { base_gpu, .. }) = &self.init_state {
+            base_gpu.write_caches_out();
+        }
         log::debug!("Exiting the event loop!");
     }
 }

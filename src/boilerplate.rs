@@ -1,4 +1,6 @@
-use std::sync::Arc;
+use std::{
+    collections::HashMap, fs::OpenOptions, io::Write, path::PathBuf, str::FromStr, sync::Arc,
+};
 
 use log::Level;
 use vulkano::{
@@ -25,7 +27,10 @@ use vulkano::{
         Instance, InstanceCreateFlags, InstanceCreateInfo,
     },
     memory::allocator::StandardMemoryAllocator,
-    pipeline::graphics::viewport::Viewport,
+    pipeline::{
+        cache::{PipelineCache, PipelineCacheCreateInfo},
+        graphics::viewport::Viewport,
+    },
     query::{QueryPool, QueryPoolCreateInfo, QueryType},
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass},
     swapchain::{
@@ -35,6 +40,8 @@ use vulkano::{
     sync::GpuFuture,
     VulkanError, VulkanLibrary,
 };
+
+pub const CACHE_DIR: &str = "cache";
 
 // ALL of the render passes my application uses are here
 // mostly so i can centralize framebuffer regeneration
@@ -131,9 +138,9 @@ pub struct BaseGpuState {
     pub command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     pub descriptor_set_allocator: StandardDescriptorSetAllocator,
 
-    pub rpass_manager: RpassManager,
+    pub pipeline_caches: HashMap<&'static str, Arc<PipelineCache>>,
 
-    pub shader_loader: shaderc::Compiler,
+    pub rpass_manager: RpassManager,
 }
 
 impl BaseGpuState {
@@ -148,6 +155,57 @@ impl BaseGpuState {
         )
         .unwrap()
     }
+
+    // pipeline cache stuff
+
+    pub fn get_cache(&self, name: &'static str) -> Arc<PipelineCache> {
+        self.pipeline_caches.get(name).unwrap().clone()
+    }
+
+    pub fn register_cache(&mut self, name: &'static str) {
+        let path = PathBuf::from_str(CACHE_DIR)
+            .unwrap()
+            .join(name)
+            .with_extension("bin");
+        let initial_data = std::fs::read(path).unwrap_or(vec![]);
+        let cache = unsafe {
+            PipelineCache::new(
+                self.device.clone(),
+                PipelineCacheCreateInfo {
+                    initial_data,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+        assert!(
+            self.pipeline_caches.insert(name, cache).is_none(),
+            "You already registered that pipeline cache!!"
+        );
+    }
+
+    pub fn write_caches_out(&self) {
+        for name in self.pipeline_caches.keys() {
+            self.write_cache_out(name);
+        }
+    }
+
+    fn write_cache_out(&self, name: &str) {
+        let path = PathBuf::from_str(CACHE_DIR)
+            .unwrap()
+            .join(name)
+            .with_extension("bin");
+        let data = self.pipeline_caches.get(name).unwrap().get_data().unwrap();
+        OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(path)
+            .unwrap()
+            .write_all(&data)
+            .unwrap();
+    }
+
+    // profiling query pool / timestamp stuff
 
     pub fn update_query_results(&mut self) {
         let mut next = [0u64; crate::querybank::NUM_QUERIES as usize * 2];
@@ -644,10 +702,7 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         memory_allocator,
         command_buffer_allocator,
         descriptor_set_allocator,
+        pipeline_caches: HashMap::new(),
         rpass_manager,
-        // TODO i might consider the possibility of shifting shader compilation to the build stage
-        // instead of stitching the SPIR-V together at runtime
-        // until then this is easier :)
-        shader_loader: shaderc::Compiler::new().expect("we need a shaderc compiler..."),
     }
 }

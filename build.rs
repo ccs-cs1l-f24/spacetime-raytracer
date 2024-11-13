@@ -30,7 +30,8 @@ const SHADER_PATHS: &[(&str, &[&str])] = &[
         &[
             "FILL_LOOKUP",
             "SORT_LOOKUP",
-            "UPDATE_START_INDICES_1, UPDATE_START_INDICES_2",
+            "UPDATE_START_INDICES_1",
+            "UPDATE_START_INDICES_2",
         ],
     ),
     (

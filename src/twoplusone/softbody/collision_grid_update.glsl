@@ -82,6 +82,7 @@ layout(push_constant) uniform Settings {
         start_indices[index] = 4294967295;
     }
 #endif
+
 #ifdef UPDATE_START_INDICES_2
     void main() {
         uint index = gl_GlobalInvocationID.x;

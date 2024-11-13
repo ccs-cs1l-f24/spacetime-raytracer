@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     collections::{BTreeMap, HashMap},
     sync::Arc,
 };
@@ -787,7 +788,16 @@ pub struct SoftbodyComputePipelines {
     update_start_indices_2: Arc<ComputePipeline>,
 }
 
-pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyComputePipelines {
+pub fn create_softbody_compute_pipelines(base: &mut BaseGpuState) -> SoftbodyComputePipelines {
+    base.register_cache("rk4_0");
+    base.register_cache("rk4_1");
+    base.register_cache("rk4_2");
+    base.register_cache("rk4_3");
+    base.register_cache("rk4_4");
+    base.register_cache("cgrid_fill_lookup");
+    base.register_cache("cgrid_sort_lookup");
+    base.register_cache("cgrid_update_start_indices_1");
+    base.register_cache("cgrid_update_start_indices_2");
     let rk4_set_layout = DescriptorSetLayout::new(
         base.device.clone(),
         DescriptorSetLayoutCreateInfo {
@@ -858,23 +868,14 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         },
     )
     .unwrap();
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("EULER", None);
-    let shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("softbodyrk4.glsl"),
-            shaderc::ShaderKind::DefaultCompute,
-            "softbodyrk4_euler",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!("spv/softbodyrk4_EULER.spv"))
+                    .unwrap()
+                    .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -892,23 +893,16 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         },
     )
     .unwrap();
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("RK4STAGE_0", None);
-    let shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("softbodyrk4.glsl"),
-            shaderc::ShaderKind::DefaultCompute,
-            "softbodyrk4_0",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/softbodyrk4_RK4STAGE_0.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -916,7 +910,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
     let rk4_0 = ComputePipeline::new(
         base.device.clone(),
-        None,
+        Some(base.get_cache("rk4_0")),
         ComputePipelineCreateInfo {
             stage: PipelineShaderStageCreateInfo::new(shader.clone()),
             ..ComputePipelineCreateInfo::stage_layout(
@@ -926,23 +920,16 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         },
     )
     .unwrap();
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("RK4STAGE_1", None);
-    let shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("softbodyrk4.glsl"),
-            shaderc::ShaderKind::DefaultCompute,
-            "softbodyrk4_1",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/softbodyrk4_RK4STAGE_1.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -950,7 +937,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
     let rk4_1 = ComputePipeline::new(
         base.device.clone(),
-        None,
+        Some(base.get_cache("rk4_1")),
         ComputePipelineCreateInfo {
             stage: PipelineShaderStageCreateInfo::new(shader.clone()),
             ..ComputePipelineCreateInfo::stage_layout(
@@ -960,23 +947,16 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         },
     )
     .unwrap();
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("RK4STAGE_2", None);
-    let shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("softbodyrk4.glsl"),
-            shaderc::ShaderKind::DefaultCompute,
-            "softbodyrk4_2",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/softbodyrk4_RK4STAGE_2.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -984,7 +964,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
     let rk4_2 = ComputePipeline::new(
         base.device.clone(),
-        None,
+        Some(base.get_cache("rk4_2")),
         ComputePipelineCreateInfo {
             stage: PipelineShaderStageCreateInfo::new(shader.clone()),
             ..ComputePipelineCreateInfo::stage_layout(
@@ -994,23 +974,16 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         },
     )
     .unwrap();
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("RK4STAGE_3", None);
-    let shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("softbodyrk4.glsl"),
-            shaderc::ShaderKind::DefaultCompute,
-            "softbodyrk4_3",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/softbodyrk4_RK4STAGE_3.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -1018,7 +991,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
     let rk4_3 = ComputePipeline::new(
         base.device.clone(),
-        None,
+        Some(base.get_cache("rk4_3")),
         ComputePipelineCreateInfo {
             stage: PipelineShaderStageCreateInfo::new(shader.clone()),
             ..ComputePipelineCreateInfo::stage_layout(
@@ -1028,23 +1001,16 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         },
     )
     .unwrap();
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("RK4STAGE_4", None);
-    let shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("softbodyrk4.glsl"),
-            shaderc::ShaderKind::DefaultCompute,
-            "softbodyrk4_4",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/softbodyrk4_RK4STAGE_4.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -1052,7 +1018,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
     let rk4_4 = ComputePipeline::new(
         base.device.clone(),
-        None,
+        Some(base.get_cache("rk4_4")),
         ComputePipelineCreateInfo {
             stage: PipelineShaderStageCreateInfo::new(shader.clone()),
             ..ComputePipelineCreateInfo::stage_layout(
@@ -1076,23 +1042,16 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     )
     .unwrap();
 
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("FILL_LOOKUP", None);
-    let shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("collision_grid_update.glsl"),
-            shaderc::ShaderKind::DefaultCompute,
-            "cgrid_fill_lookup",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/collision_grid_update_FILL_LOOKUP.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -1100,7 +1059,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
     let fill_lookup = ComputePipeline::new(
         base.device.clone(),
-        None,
+        Some(base.get_cache("cgrid_fill_lookup")),
         ComputePipelineCreateInfo {
             stage: PipelineShaderStageCreateInfo::new(shader.clone()),
             ..ComputePipelineCreateInfo::stage_layout(
@@ -1111,23 +1070,16 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     )
     .unwrap();
 
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("SORT_LOOKUP", None);
-    let shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("collision_grid_update.glsl"),
-            shaderc::ShaderKind::DefaultCompute,
-            "cgrid_sort_lookup",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/collision_grid_update_SORT_LOOKUP.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -1135,7 +1087,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
     let sort_lookup = ComputePipeline::new(
         base.device.clone(),
-        None,
+        Some(base.get_cache("cgrid_sort_lookup")),
         ComputePipelineCreateInfo {
             stage: PipelineShaderStageCreateInfo::new(shader.clone()),
             ..ComputePipelineCreateInfo::stage_layout(
@@ -1146,23 +1098,16 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     )
     .unwrap();
 
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("UPDATE_START_INDICES_1", None);
-    let shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("collision_grid_update.glsl"),
-            shaderc::ShaderKind::DefaultCompute,
-            "update_start_indices_1",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/collision_grid_update_UPDATE_START_INDICES_1.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -1170,7 +1115,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
     let update_start_indices_1 = ComputePipeline::new(
         base.device.clone(),
-        None,
+        Some(base.get_cache("cgrid_update_start_indices_1")),
         ComputePipelineCreateInfo {
             stage: PipelineShaderStageCreateInfo::new(shader.clone()),
             ..ComputePipelineCreateInfo::stage_layout(
@@ -1180,23 +1125,16 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
         },
     )
     .unwrap();
-    let mut opts = shaderc::CompileOptions::new().unwrap();
-    opts.set_include_callback(super::include_callback);
-    opts.add_macro_definition("UPDATE_START_INDICES_2", None);
-    let shader = base
-        .shader_loader
-        .compile_into_spirv(
-            include_str!("collision_grid_update.glsl"),
-            shaderc::ShaderKind::DefaultCompute,
-            "update_start_indices_2",
-            "main",
-            Some(&opts),
-        )
-        .unwrap();
     let shader = unsafe {
         ShaderModule::new(
             base.device.clone(),
-            ShaderModuleCreateInfo::new(shader.as_binary()),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/collision_grid_update_UPDATE_START_INDICES_2.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
         )
         .unwrap()
     }
@@ -1204,7 +1142,7 @@ pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyCompute
     .unwrap();
     let update_start_indices_2 = ComputePipeline::new(
         base.device.clone(),
-        None,
+        Some(base.get_cache("cgrid_update_start_indices_2")),
         ComputePipelineCreateInfo {
             stage: PipelineShaderStageCreateInfo::new(shader.clone()),
             ..ComputePipelineCreateInfo::stage_layout(

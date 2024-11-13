@@ -1,0 +1,2 @@
+(this file makes sure the cache directory is added to git)
+(this is where pipeline caches are written to)
