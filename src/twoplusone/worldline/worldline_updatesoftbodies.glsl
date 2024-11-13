@@ -120,6 +120,10 @@ void main() {
         particle.diagonal_neighbors[3] != -1
     ) {
         // if you're in the middle of an object, no need to do anything
+        return;
     }
+
+    // plot 4 points just outside the "area of effect" of this particle
+    // TODO
 }
  
