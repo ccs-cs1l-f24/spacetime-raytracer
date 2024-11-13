@@ -155,11 +155,18 @@ vec2 get_forces() {
     // ideally the spring grid is fine enough that each |d| is at most 1 lightframe
     // and we can treat the spring forces as instantaneously accurate
     // F = -k(|d| - r) * (d/|d|) where d = p_1 - p_2
+    // despite being very simple they seem to produce the best effect!
     for (int i = 0; i < 4; i++) { // this loop should unroll... if there are performance issues i can manually unroll
         if (particle.immediate_neighbors[i] != -1) {
             Particle n = state_particles[particle.immediate_neighbors[i]];
             vec2 d = particle.ground_pos - n.ground_pos;
             forces += -k * (length(d) - immediate_neighbor_dist) * normalize(d);
+            // // too stiff/not working
+            // // "two coulomb potentials stacked on top of each other" - parsa
+            // forces += normalize(d) * 1/(length(d)*length(d)) - 20000/((length(d) + 6)*(length(d) + 6));
+            // // yukawa potential (not the right thing)
+            // k^2 * (e^(-length(d)/immediate_neighbor_dist) * (r/immediate_neighbor_dist) + 1) / length(d)^2
+            // forces += normalize(d) * k*k * (exp(-length(d)/immediate_neighbor_dist) * (length(d)/immediate_neighbor_dist + 1))/max(length(d) * length(d), 0.1);
         }
     }
     for (int i = 0; i < 4; i++) {
@@ -169,6 +176,7 @@ vec2 get_forces() {
             forces += -k * (length(d) - diagonal_neighbor_dist) * normalize(d);
         }
     }
+    // temporary
     if (particle.ground_pos.x < 0.2) {
         forces += vec2(1.0, 0.0);
     }
@@ -258,7 +266,7 @@ void propagate_breaking(uint index) {
         vec2 vel = original_particles[index].ground_vel + acc * h / 6.0;
         // since timestamps aren't infinitely granular, acceleration can cause the velocity to be over c
         // we correct for that here :D
-        if (length(vel) >= 1.0) vel = normalize(vel) * 0.99;
+        if (length(vel) >= 1.0) vel = normalize(vel) * 0.9999;
         out_particles[index].ground_vel = vel;
         vec2 new_pos = original_particles[index].ground_pos + vel * h;
         out_particles[index].ground_pos = new_pos;
