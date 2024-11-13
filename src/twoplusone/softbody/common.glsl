@@ -9,6 +9,16 @@ struct Particle {
     uint _b;
 };
 
+// gotta love uniform buffers automatically padding to 16 bytes :/
+// we'll represent it explicitly here
+struct Object {
+    // add to (immediate/diagonal)_neighbors to get actual location in particle buf of said neighbors
+    uint offset;
+    uint material_index;
+    uint _a;
+    uint _b;
+};
+
 // copied from sebastian lague's vid
 // idk if it's actually a good hash function
 // whatever it works for him

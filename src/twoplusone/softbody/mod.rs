@@ -80,10 +80,13 @@ pub struct Particle {
 
 #[derive(BufferContents, Debug, Clone)]
 #[repr(C)]
+// need to keep the size of this struct a multiple of 16!!!
+// cause glsl uniform buffers are stupid >:(
 pub struct Object {
     pub offset: u32,
     pub material_index: u32,
-    // pub k: f32,
+    pub _a: u32,
+    pub _b: u32,
 }
 
 #[derive(BufferContents, Debug, Clone)]
@@ -115,7 +118,12 @@ pub struct CollisionGridPushConstants {
 // let's set an arbitrary resolution of 0.0035 cs per pixel (200 particles per lightsecond)
 // please only feed this 8-bit depth RGB images cause everything else will fail
 // is BLOCKING ON GPU ACTIONS
-pub fn image_to_softbody<R: std::io::Read>(r: R, object_index: u32) -> Vec<Particle> {
+pub fn image_to_softbody<R: std::io::Read>(
+    r: R,
+    object_index: u32,
+    ground_pos_offset: [f32; 2],
+    starting_ground_vel: [f32; 2],
+) -> Vec<Particle> {
     let decoder = png::Decoder::new(r);
     let mut reader = decoder.read_info().unwrap();
     let mut buf = vec![0; reader.output_buffer_size()];
@@ -134,11 +142,11 @@ pub fn image_to_softbody<R: std::io::Read>(r: R, object_index: u32) -> Vec<Parti
             particles.push(Particle {
                 immediate_neighbors: [-1, -1, -1, -1],
                 diagonal_neighbors: [-1, -1, -1, -1],
-                ground_pos: [pos.0 as f32 * 0.0035, pos.1 as f32 * 0.0035],
-                ground_vel: [0.0, 0.0],
-                // // gives each particle a little jitter
-                // // necessary if we're calling normalize(ground_vel) in the shaders
-                // ground_vel: [rand::random::<f32>() * 0.005, rand::random::<f32>() * 0.005],
+                ground_pos: [
+                    pos.0 as f32 * 0.0035 + ground_pos_offset[0],
+                    pos.1 as f32 * 0.0035 + ground_pos_offset[1],
+                ],
+                ground_vel: starting_ground_vel,
                 rest_mass: 1.0,
                 object_index,
                 _a: 0,
@@ -442,6 +450,10 @@ impl SoftbodyState {
         }
     }
 
+    pub fn num_particles(&self) -> usize {
+        self.particles.len()
+    }
+
     // BLOCKS on gpu upload
     pub fn push(&self, base: &BaseGpuState) {
         let particle_staging_ptr =
@@ -582,11 +594,7 @@ impl SoftbodyState {
         cmd_buf
             .bind_pipeline_compute(pipelines.euler.clone())
             .unwrap()
-            .push_constants(
-                pipelines.rk4_pipeline_layout.clone(),
-                0,
-                todo!(),
-            )
+            .push_constants(pipelines.rk4_pipeline_layout.clone(), 0, todo!())
             .unwrap()
             .bind_descriptor_sets(
                 PipelineBindPoint::Compute,

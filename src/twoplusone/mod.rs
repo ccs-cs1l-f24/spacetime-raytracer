@@ -66,24 +66,32 @@ impl World {
 
 pub fn create_world(base: &BaseGpuState, pipelines: &PipelineManager) -> World {
     let mut softbody_state = softbody::SoftbodyState::create(base, &pipelines.softbody_compute);
-    // softbody_state.add_particles(
-    //     &mut softbody::image_to_softbody(
-    //         include_bytes!("../../softbodyimages/testimg.png").as_slice(),
-    //         0,
-    //     ),
-    //     softbody::Object {
-    //         offset: 0,
-    //         material_index: 0,
-    //     },
-    // );
     softbody_state.add_particles(
         &mut softbody::image_to_softbody(
-            include_bytes!("../../softbodyimages/testimg2.png").as_slice(),
-            1,
+            include_bytes!("../../softbodyimages/testimg3.png").as_slice(),
+            0,
+            [0.0, 0.0],
+            [0.4, 0.0],
         ),
         softbody::Object {
-            offset: 1,
+            offset: 0,
             material_index: 0,
+            _a: 0,
+            _b: 0,
+        },
+    );
+    softbody_state.add_particles(
+        &mut softbody::image_to_softbody(
+            include_bytes!("../../softbodyimages/testimg4.png").as_slice(),
+            1,
+            [2.0, 0.0],
+            [0.0, 0.0],
+        ),
+        softbody::Object {
+            offset: softbody_state.num_particles() as u32,
+            material_index: 0,
+            _a: 0,
+            _b: 0,
         },
     );
     softbody_state.push(base);

@@ -5,12 +5,6 @@
 #include "common.glsl"
 #include "relativity.glsl"
 
-struct Object {
-    uint offset; // in the main particle buffers
-    uint material_index;
-    //float k; // spring constant
-};
-
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 // rk4 time integrator (stable):
@@ -44,8 +38,6 @@ layout(set = 0, binding = 3) buffer ForcesAccum {
 };
 
 layout(set = 1, binding = 0) uniform Objects {
-    // max uniform buffer size should be at least 65536
-    // we should be able to fit at LEAST 1024 objects in that space
     Object objects[1024];
 };
 
@@ -106,9 +98,9 @@ layout(push_constant) uniform Settings {
 // - collisions
 // - global forces (gravity?, wind?, etc)
 vec2 get_forces() {
-    Object o = objects[0]; // to stop vulkano from complaining about an unused descset binding
-
     Particle particle = state_particles[gl_GlobalInvocationID.x];
+    Object obj = objects[particle.object_index];
+
     vec2 forces = vec2(0.0, 0.0); // we accumulate forces here
     if (particle.immediate_neighbors[0] == -1 &&
         particle.immediate_neighbors[1] == -1 &&
@@ -142,7 +134,7 @@ vec2 get_forces() {
             particle.diagonal_neighbors[0] == index - 1 ||
             particle.diagonal_neighbors[1] == index - 1 ||
             particle.diagonal_neighbors[2] == index - 1 ||
-            particle.diagonal_neighbors[3] == index) continue;
+            particle.diagonal_neighbors[3] == index - 1) continue;
         // no colliding with yourself!
         if (p2.ground_pos == particle.ground_pos) continue;
         vec2 d = particle.ground_pos - p2.ground_pos;
@@ -158,7 +150,7 @@ vec2 get_forces() {
     // despite being very simple they seem to produce the best effect!
     for (int i = 0; i < 4; i++) { // this loop should unroll... if there are performance issues i can manually unroll
         if (particle.immediate_neighbors[i] != -1) {
-            Particle n = state_particles[particle.immediate_neighbors[i]];
+            Particle n = state_particles[particle.immediate_neighbors[i] + obj.offset];
             vec2 d = particle.ground_pos - n.ground_pos;
             forces += -k * (length(d) - immediate_neighbor_dist) * normalize(d);
             // // too stiff/not working
@@ -171,15 +163,15 @@ vec2 get_forces() {
     }
     for (int i = 0; i < 4; i++) {
         if (particle.diagonal_neighbors[i] != -1) {
-            Particle n = state_particles[particle.diagonal_neighbors[i]];
+            Particle n = state_particles[particle.diagonal_neighbors[i] + obj.offset];
             vec2 d = particle.ground_pos - n.ground_pos;
             forces += -k * (length(d) - diagonal_neighbor_dist) * normalize(d);
         }
     }
     // temporary
-    if (particle.ground_pos.x < 0.2) {
-        forces += vec2(1.0, 0.0);
-    }
+    // if (particle.ground_pos.x < 0.2) {
+    //     forces += vec2(1.0, 0.0);
+    // }
 
     return forces;
 }
@@ -274,23 +266,24 @@ void propagate_breaking(uint index) {
 
         // break bonds between particles that are too far apart
         Particle p = original_particles[index];
+        Object obj = objects[p.object_index];
         for (int i = 0; i < 4; i++) {
             if (p.immediate_neighbors[i] != -1) {
-                vec2 d = p.ground_pos - original_particles[p.immediate_neighbors[i]].ground_pos;
+                vec2 d = p.ground_pos - original_particles[p.immediate_neighbors[i] + obj.offset].ground_pos;
                 if (length(d) > bond_break_threshold) {
                     out_particles[index].immediate_neighbors[i] = -1;
                     int j = i > 1 ? i - 2 : i + 2;
-                    out_particles[p.immediate_neighbors[i]].immediate_neighbors[j] = -1;
+                    out_particles[p.immediate_neighbors[i] + obj.offset].immediate_neighbors[j] = -1;
                 }
             }
         }
         for (int i = 0; i < 4; i++) {
             if (p.diagonal_neighbors[i] != -1) {
-                vec2 d = p.ground_pos - original_particles[p.diagonal_neighbors[i]].ground_pos;
+                vec2 d = p.ground_pos - original_particles[p.diagonal_neighbors[i] + obj.offset].ground_pos;
                 if (length(d) > bond_break_threshold) {
                     out_particles[index].diagonal_neighbors[i] = -1;
                     int j = 3 - i;
-                    out_particles[p.diagonal_neighbors[i]].diagonal_neighbors[j] = -1;
+                    out_particles[p.diagonal_neighbors[i] + obj.offset].diagonal_neighbors[j] = -1;
                 }
             }
         }
