@@ -9,11 +9,13 @@ mod utils;
 
 pub struct PipelineManager {
     pub point_pipelines: point_render_nr::PointRenderPipelines,
+    pub softbody_compute: softbody::SoftbodyComputePipelines,
 }
 
 pub fn create_pipeline_manager(base: &BaseGpuState) -> PipelineManager {
     PipelineManager {
         point_pipelines: point_render_nr::create_point_render_pipelines(base),
+        softbody_compute: softbody::create_softbody_compute_pipelines(base),
     }
 }
 

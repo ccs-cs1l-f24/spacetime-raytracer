@@ -213,14 +213,6 @@ impl winit::application::ApplicationHandler for App {
                         &world.softbodies,
                         &pipeline_manager.point_pipelines,
                     );
-                    // scene_manager.render(
-                    //     &self.cfg,
-                    //     main_window.inner_size().width as f32
-                    //         / main_window.inner_size().height as f32,
-                    //     &base_gpu,
-                    //     &mut cmd_buf,
-                    //     present_image_index,
-                    // );
                     let cmd_buf = cmd_buf.build().unwrap();
                     let mut prev_frame_future = base_gpu
                         .swapchain_manager

@@ -1,10 +1,23 @@
-use std::collections::HashMap;
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use smallvec::SmallVec;
 use vulkano::{
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{BufferCopy, CopyBufferInfo},
+    descriptor_set::layout::{
+        DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
+        DescriptorType,
+    },
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter},
+    pipeline::{
+        compute::ComputePipelineCreateInfo,
+        layout::{PipelineLayoutCreateInfo, PushConstantRange},
+        ComputePipeline, PipelineLayout, PipelineShaderStageCreateInfo,
+    },
+    shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages},
 };
 
 use crate::boilerplate::BaseGpuState;
@@ -207,6 +220,259 @@ pub fn image_to_softbody<R: std::io::Read>(r: R, base: &BaseGpuState) -> Softbod
 // particles ===> worldspace mesh ===> ring buffer
 
 pub struct SoftbodyComputePipelines {
+    set_layout: Arc<DescriptorSetLayout>,
+    // pipeline layout (same for each of these pipelines lol)
+    pipeline_layout: Arc<PipelineLayout>,
     // euler
+    euler: Arc<ComputePipeline>,
     // rk4
+    rk4_0: Arc<ComputePipeline>,
+    rk4_1: Arc<ComputePipeline>,
+    rk4_2: Arc<ComputePipeline>,
+    rk4_3: Arc<ComputePipeline>,
+    rk4_4: Arc<ComputePipeline>,
+}
+
+pub fn create_softbody_compute_pipelines(base: &BaseGpuState) -> SoftbodyComputePipelines {
+    let set_layout = DescriptorSetLayout::new(
+        base.device.clone(),
+        DescriptorSetLayoutCreateInfo {
+            bindings: {
+                let binding = DescriptorSetLayoutBinding {
+                    stages: ShaderStages::COMPUTE,
+                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageBuffer)
+                };
+                let mut tree = BTreeMap::new();
+                tree.insert(0, binding.clone());
+                tree.insert(1, binding.clone());
+                tree.insert(2, binding.clone());
+                tree.insert(3, binding.clone());
+                tree
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let pipeline_layout = PipelineLayout::new(
+        base.device.clone(),
+        PipelineLayoutCreateInfo {
+            push_constant_ranges: vec![PushConstantRange {
+                stages: ShaderStages::COMPUTE,
+                offset: 0,
+                size: 4,
+            }],
+            set_layouts: vec![set_layout.clone()],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.add_macro_definition("EULER", None);
+    let shader = base
+        .shader_loader
+        .compile_into_spirv(
+            include_str!("softbodyrk4.glsl"),
+            shaderc::ShaderKind::DefaultCompute,
+            "softbodyrk4_euler",
+            "main",
+            Some(&opts),
+        )
+        .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(shader.as_binary()),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let euler = ComputePipeline::new(
+        base.device.clone(),
+        None,
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
+    let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.add_macro_definition("RK4STAGE_0", None);
+    let shader = base
+        .shader_loader
+        .compile_into_spirv(
+            include_str!("softbodyrk4.glsl"),
+            shaderc::ShaderKind::DefaultCompute,
+            "softbodyrk4_0",
+            "main",
+            Some(&opts),
+        )
+        .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(shader.as_binary()),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let rk4_0 = ComputePipeline::new(
+        base.device.clone(),
+        None,
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
+    let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.add_macro_definition("RK4STAGE_1", None);
+    let shader = base
+        .shader_loader
+        .compile_into_spirv(
+            include_str!("softbodyrk4.glsl"),
+            shaderc::ShaderKind::DefaultCompute,
+            "softbodyrk4_1",
+            "main",
+            Some(&opts),
+        )
+        .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(shader.as_binary()),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let rk4_1 = ComputePipeline::new(
+        base.device.clone(),
+        None,
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
+    let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.add_macro_definition("RK4STAGE_2", None);
+    let shader = base
+        .shader_loader
+        .compile_into_spirv(
+            include_str!("softbodyrk4.glsl"),
+            shaderc::ShaderKind::DefaultCompute,
+            "softbodyrk4_2",
+            "main",
+            Some(&opts),
+        )
+        .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(shader.as_binary()),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let rk4_2 = ComputePipeline::new(
+        base.device.clone(),
+        None,
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
+    let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.add_macro_definition("RK4STAGE_3", None);
+    let shader = base
+        .shader_loader
+        .compile_into_spirv(
+            include_str!("softbodyrk4.glsl"),
+            shaderc::ShaderKind::DefaultCompute,
+            "softbodyrk4_3",
+            "main",
+            Some(&opts),
+        )
+        .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(shader.as_binary()),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let rk4_3 = ComputePipeline::new(
+        base.device.clone(),
+        None,
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
+    let mut opts = shaderc::CompileOptions::new().unwrap();
+    opts.add_macro_definition("RK4STAGE_4", None);
+    let shader = base
+        .shader_loader
+        .compile_into_spirv(
+            include_str!("softbodyrk4.glsl"),
+            shaderc::ShaderKind::DefaultCompute,
+            "softbodyrk4_4",
+            "main",
+            Some(&opts),
+        )
+        .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(shader.as_binary()),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let rk4_4 = ComputePipeline::new(
+        base.device.clone(),
+        None,
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
+
+    SoftbodyComputePipelines {
+        set_layout,
+        pipeline_layout,
+        euler,
+        rk4_0,
+        rk4_1,
+        rk4_2,
+        rk4_3,
+        rk4_4,
+    }
 }

@@ -122,8 +122,9 @@ vec2 get_forces() {
     void main() { // relies on original, out, force_acc
         uint index = gl_GlobalInvocationID.x;
         vec2 forces = force_acc[index];
-        out_particles[index].vel += forces * h / 6.0;
-        out_particles[index].pos += original_particles[index].vel * h;
+        vec2 vel = original_particles[index].ground_vel + forces * h / 6.0;
+        out_particles[index].ground_vel = vel;
+        out_particles[index].ground_pos = original_particles[index].ground_pos + vel * h;
         force_acc[index] = vec2(0.0);
     }
 #endif
