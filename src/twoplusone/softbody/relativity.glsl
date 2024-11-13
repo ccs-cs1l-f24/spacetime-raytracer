@@ -26,6 +26,10 @@ float r_ke(Particle p) {
     return r_energy(p) - p.rest_mass * C2;
 }
 
+vec2 nr_acc(vec2 F, vec2 v, float m0) {
+    return F / m0;
+}
+
 // https://en.wikipedia.org/wiki/Relativistic_mechanics#Force
 vec2 r_acc(vec2 F, vec2 v, float m0) {
     return 1.0/(m0 * gamma(length(v))) * (F - dot(v, F)*v/C2);

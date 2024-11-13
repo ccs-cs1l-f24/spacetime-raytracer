@@ -19,6 +19,7 @@ fn main() {
     // even though to be fair the new designs are like always better
     let mut app = App {
         prev_frame_start: Instant::now(),
+        prev_frame_stats: Default::default(),
         keyboard: keyboard::Keyboard::default(),
         init_state: None,
     };
@@ -51,6 +52,7 @@ struct InitState {
 struct App {
     // for accurate profiling, since the "start" in resumetimereached often refers to something else
     prev_frame_start: Instant,
+    prev_frame_stats: querybank::FramePerfStats,
     keyboard: keyboard::Keyboard,
     // i hate that this has to be option
     // but there's no way to initialize the vulkan context without the surface
@@ -198,7 +200,7 @@ impl winit::application::ApplicationHandler for App {
                         );
                         return;
                     }
-                    debug_ui_state.start_gui();
+                    debug_ui_state.start_gui(self.prev_frame_stats.clone());
 
                     if *recreate_swapchain {
                         base_gpu.resize(main_window.inner_size().into());
@@ -231,7 +233,7 @@ impl winit::application::ApplicationHandler for App {
                     }
 
                     base_gpu.update_query_results();
-                    let _frame_stats = crate::querybank::get_frame_perf_stats(&base_gpu);
+                    self.prev_frame_stats = crate::querybank::get_frame_perf_stats(&base_gpu);
                     // log::debug!("{:?}", frame_stats);
                     // println!("{:?}", &base_gpu.query_results[..4]);
                     base_gpu.reset_query_pool(); // ALL QUERIES SHOULD GO AFTER HERE

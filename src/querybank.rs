@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{fmt::Display, time::Duration};
 
 use crate::boilerplate::BaseGpuState;
 
@@ -8,11 +8,21 @@ pub const GRID_UPDATE_AFTER: u32 = 2;
 
 pub const NUM_QUERIES: u32 = 32;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 #[allow(unused)] // allow unused fields :)
 pub struct FramePerfStats {
     pub rk4_time: Duration,
     pub grid_update_time: Duration,
+}
+
+impl Display for FramePerfStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Rk4: {:?}\nGrid Update: {:?}",
+            self.rk4_time, self.grid_update_time
+        )
+    }
 }
 
 pub fn get_frame_perf_stats(base: &BaseGpuState) -> FramePerfStats {

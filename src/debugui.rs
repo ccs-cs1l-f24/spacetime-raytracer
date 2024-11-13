@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use vulkano::{image::view::ImageView, sync::GpuFuture};
 
-use crate::boilerplate::BaseGpuState;
+use crate::{boilerplate::BaseGpuState, querybank::FramePerfStats};
 
 // the rendering and simulation options
 // that should be tweakable live from the debug ui
@@ -18,9 +18,7 @@ impl HotswapConfig {
 
 impl Default for HotswapConfig {
     fn default() -> Self {
-        Self {
-            max_fps: 144,
-        }
+        Self { max_fps: 144 }
     }
 }
 
@@ -43,7 +41,7 @@ pub struct DebugUiState {
 
 impl DebugUiState {
     // call before each render attempt
-    pub fn start_gui(&mut self) {
+    pub fn start_gui(&mut self, perf: FramePerfStats) {
         self.gui.immediate_ui(|gui| {
             let ctx = gui.context();
             egui::Window::new("Debug UI")
@@ -58,6 +56,7 @@ impl DebugUiState {
                         "Current FPS: {}",
                         (1000000.0 / self.time_since_last_frame.as_micros() as f32).ceil() as u64
                     ));
+                    ui.label(format!("{}", perf));
                     ui.separator();
                     ui.heading("Render Settings");
                     // ui.horizontal(|ui| {
