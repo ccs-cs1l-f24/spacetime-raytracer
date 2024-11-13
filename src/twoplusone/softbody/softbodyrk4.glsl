@@ -133,7 +133,7 @@ vec2 get_forces() {
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;
         vec2 forces = get_forces();
-        out_particles[index].ground_vel += forces * h;
+        out_particles[index].ground_vel += forces * original_particles[index].rest_mass * h;
         out_particles[index].ground_pos += original_particles[index].ground_vel * h;
     }
 #endif
@@ -145,7 +145,7 @@ vec2 get_forces() {
         if (index >= num_particles) return;
         vec2 forces = get_forces();
         force_acc[index] = forces;
-        vec2 new_vel = original_particles[index].ground_vel + forces * h / 2.0;
+        vec2 new_vel = original_particles[index].ground_vel + forces * original_particles[index].rest_mass * h / 2.0;
         out_particles[index].ground_vel = new_vel;
         out_particles[index].ground_pos = original_particles[index].ground_pos + new_vel * h / 2.0;
     }
@@ -156,7 +156,7 @@ vec2 get_forces() {
         if (index >= num_particles) return;
         vec2 forces = get_forces();
         force_acc[index] += forces * 2.0;
-        vec2 new_vel = original_particles[index].ground_vel + forces * h / 2.0;
+        vec2 new_vel = original_particles[index].ground_vel + forces * original_particles[index].rest_mass * h / 2.0;
         out_particles[index].ground_vel = new_vel;
         out_particles[index].ground_pos = original_particles[index].ground_pos + new_vel * h / 2.0;
     }
@@ -167,7 +167,7 @@ vec2 get_forces() {
         if (index >= num_particles) return;
         vec2 forces = get_forces();
         force_acc[index] += forces * 2.0;
-        vec2 new_vel = original_particles[index].ground_vel + forces * h;
+        vec2 new_vel = original_particles[index].ground_vel + forces * original_particles[index].rest_mass * h;
         out_particles[index].ground_vel = new_vel;
         out_particles[index].ground_pos = original_particles[index].ground_pos + new_vel * h;
     }
@@ -189,7 +189,7 @@ vec2 get_forces() {
         uint index = gl_GlobalInvocationID.x;
         if (index >= num_particles) return;
         vec2 forces = force_acc[index];
-        vec2 vel = original_particles[index].ground_vel + forces * h / 6.0;
+        vec2 vel = original_particles[index].ground_vel + forces * original_particles[index].rest_mass * h / 6.0;
         out_particles[index].ground_vel = vel;
         out_particles[index].ground_pos = original_particles[index].ground_pos + vel * h;
         force_acc[index] = vec2(0.0);

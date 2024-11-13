@@ -135,7 +135,7 @@ pub fn image_to_softbody<R: std::io::Read>(r: R, object_index: u32) -> Vec<Parti
                 diagonal_neighbors: [-1, -1, -1, -1],
                 ground_pos: [pos.0 as f32 * 0.005, pos.1 as f32 * 0.005],
                 ground_vel: [0.0, 0.0],
-                rest_mass: 0.0,
+                rest_mass: 1.0,
                 object_index,
                 _a: 0,
                 _b: 0,
