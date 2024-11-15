@@ -1,4 +1,5 @@
 // softbody particle
+// 64 bytes
 struct Particle {
     ivec4 immediate_neighbors; // left/up/right/down
     ivec4 diagonal_neighbors;  // tl/tr/bl/br

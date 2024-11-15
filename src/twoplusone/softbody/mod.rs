@@ -193,7 +193,7 @@ pub struct SoftbodyState {
 
     // rk4 buffers & descsets
     particle_staging: Subbuffer<[Particle]>,
-    particle_buf: Subbuffer<[Particle]>, // also used by the collision grid descset
+    pub particle_buf: Subbuffer<[Particle]>, // also used by the collision grid descset
     particle_buf_intermediate1: Subbuffer<[Particle]>,
     particle_buf_intermediate2: Subbuffer<[Particle]>,
     #[allow(unused)]
@@ -212,16 +212,16 @@ pub struct SoftbodyState {
 
     // collision buffers & descsets
     #[allow(unused)]
-    spatial_lookup: Subbuffer<[[u32; 2]]>,
+    pub spatial_lookup: Subbuffer<[[u32; 2]]>,
     #[allow(unused)]
-    start_indices: Subbuffer<[u32]>,
+    pub start_indices: Subbuffer<[u32]>,
     collision_update_ds: Arc<PersistentDescriptorSet>, // also used by the rk4 pipeline
 }
 
 impl SoftbodyState {
     // (how much should be allocated)
     const MAX_OBJECTS: u64 = 1024;
-    const MAX_PARTICLES: u64 = 1 << 20;
+    pub const MAX_PARTICLES: u64 = 1 << 20;
     pub fn create(base: &BaseGpuState, pipelines: &SoftbodyComputePipelines) -> Self {
         let particle_staging = Buffer::new_slice::<Particle>(
             base.memory_allocator.clone(),
