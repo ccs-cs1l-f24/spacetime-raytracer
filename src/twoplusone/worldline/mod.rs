@@ -16,6 +16,7 @@ use vulkano::{
         ComputePipeline, PipelineLayout, PipelineShaderStageCreateInfo,
     },
     shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages},
+    sync::{GpuFuture, PipelineStage},
 };
 
 use crate::boilerplate::BaseGpuState;
@@ -187,6 +188,29 @@ impl UpdateSoftbodiesState {
             intermediate_edges_ds,
             edge_map_ds,
         }
+    }
+
+    pub fn submit_update_worldlines(
+        &self,
+        base: &BaseGpuState,
+        pipelines: &UpdateSoftbodiesComputePipelines,
+    ) -> Box<dyn GpuFuture> {
+        let mut cmd_buf = base.create_primary_command_buffer();
+        unsafe {
+            cmd_buf
+                .write_timestamp(
+                    base.query_pool.clone(),
+                    crate::querybank::TOP_OF_MESHGEN,
+                    PipelineStage::TopOfPipe,
+                )
+                .unwrap();
+        }
+        vulkano::sync::now(base.device.clone())
+            .then_execute(base.queue.clone(), cmd_buf.build().unwrap())
+            .unwrap()
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .boxed()
     }
 }
 

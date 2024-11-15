@@ -255,6 +255,13 @@ impl winit::application::ApplicationHandler for App {
                     // println!("{:?}", &base_gpu.query_results[..4]);
                     base_gpu.reset_query_pool(); // ALL QUERIES SHOULD GO AFTER HERE
 
+                    let worldline_update_future = world
+                        .worldline_update_softbodies_state
+                        .submit_update_worldlines(
+                            &base_gpu,
+                            &pipeline_manager.worldline_update_softbodies,
+                        );
+
                     // scene rendering for this frame
                     // (everything except the debug ui)
                     let mut cmd_buf = base_gpu.create_primary_command_buffer();
@@ -282,6 +289,7 @@ impl winit::application::ApplicationHandler for App {
                     // this future does the scene rendering
                     let future = prev_frame_in_flight_future
                         .join(present_image_acquire_future)
+                        .join(worldline_update_future)
                         .then_execute(base_gpu.queue.clone(), cmd_buf)
                         .unwrap();
                     // this future does the debug ui, after everything else is rendered
