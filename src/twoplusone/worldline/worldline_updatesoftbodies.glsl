@@ -112,6 +112,7 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
     // should be invoked for every PARTICLE
     void main() {
         uint index = gl_GlobalInvocationID.x;
+        if (index > num_particles) return;
 
         Particle particle = particles[index];
 
@@ -176,6 +177,9 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
             vtx.flag = 0;
         } else vtx.flag = -1;
         vertices[index * 4 + 3] = vtx;
+
+        // so that vulkano doesn't complain when i bind all the descsets
+        int _ = ledger[0];
     }
 #endif
 
@@ -188,6 +192,7 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
     // since packed ids are unique and strictly ordered this should be fine
     void main() {
         uint index = gl_GlobalInvocationID.x;
+        if (index > num_particles*4) return;
 
         IntermediateSoftbodyWorldlineVertex vtx = vertices[index];
         if (vtx.flag == -1) return;
@@ -269,13 +274,13 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
     // should be invoked for edge_map_capacity
     void main() {
         uint index = gl_GlobalInvocationID.x;
+        if (index > edge_map_capacity) return;
         ledger[index] = 0;
     }
 #endif
 
 #ifdef WRITE_EDGES_TO_WORLDLINE
     void main() {
-        uint index = gl_GlobalInvocationID.x;
         // TODO
     }
 #endif

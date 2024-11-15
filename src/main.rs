@@ -137,6 +137,13 @@ impl winit::application::ApplicationHandler for App {
             world
                 .softbody_state // this way the first physics frame isn't working from an uninitialized cgrid (SLOW)
                 .submit_initialize_cgrid(&base_gpu, &pipeline_manager.softbody_compute)
+                .join(
+                    // this way the edge map starts out empty
+                    // and can follow a use->clear->populate loop
+                    world
+                        .worldline_update_softbodies_state
+                        .clear_edge_map(&base_gpu, &pipeline_manager.worldline_update_softbodies),
+                )
                 .then_signal_fence_and_flush()
                 .unwrap()
                 .wait(None)
@@ -260,6 +267,7 @@ impl winit::application::ApplicationHandler for App {
                         .submit_update_worldlines(
                             &base_gpu,
                             &pipeline_manager.worldline_update_softbodies,
+                            world.softbody_state.num_particles() as u32,
                         );
 
                     // scene rendering for this frame

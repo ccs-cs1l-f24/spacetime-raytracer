@@ -13,7 +13,7 @@ use vulkano::{
     pipeline::{
         compute::ComputePipelineCreateInfo,
         layout::{PipelineLayoutCreateInfo, PushConstantRange},
-        ComputePipeline, PipelineLayout, PipelineShaderStageCreateInfo,
+        ComputePipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo,
     },
     shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages},
     sync::{GpuFuture, PipelineStage},
@@ -44,6 +44,8 @@ pub struct SoftbodyWorldlines {
     //
 }
 
+#[derive(BufferContents, Debug, Clone)]
+#[repr(C)]
 pub struct UpdateSoftbodiesPushConstants {
     num_particles: u32,
     grid_resolution: f32,
@@ -161,7 +163,7 @@ impl UpdateSoftbodiesState {
         .unwrap();
         let intermediate_edges_ds = PersistentDescriptorSet::new(
             &base.descriptor_set_allocator,
-            pipelines.particles_set_layout.clone(),
+            pipelines.intermediate_edges_set_layout.clone(),
             [
                 WriteDescriptorSet::buffer(0, intermediate_vtx_buffer.clone()),
                 WriteDescriptorSet::buffer(1, intermediate_edges_buffer.clone()),
@@ -171,7 +173,7 @@ impl UpdateSoftbodiesState {
         .unwrap();
         let edge_map_ds = PersistentDescriptorSet::new(
             &base.descriptor_set_allocator,
-            pipelines.particles_set_layout.clone(),
+            pipelines.edge_map_set_layout.clone(),
             [
                 WriteDescriptorSet::buffer(0, edge_map_ledger.clone()),
                 WriteDescriptorSet::buffer(1, edge_map_vals.clone()),
@@ -190,10 +192,33 @@ impl UpdateSoftbodiesState {
         }
     }
 
+    pub fn clear_edge_map(
+        &self,
+        base: &BaseGpuState,
+        pipelines: &UpdateSoftbodiesComputePipelines,
+    ) -> Box<dyn GpuFuture> {
+        let mut cmd_buf = base.create_primary_command_buffer();
+        cmd_buf
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                pipelines.pipeline_layout.clone(),
+                2,
+                self.edge_map_ds.clone(),
+            )
+            .unwrap();
+        vulkano::sync::now(base.device.clone())
+            .then_execute(base.queue.clone(), cmd_buf.build().unwrap())
+            .unwrap()
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .boxed()
+    }
+
     pub fn submit_update_worldlines(
         &self,
         base: &BaseGpuState,
         pipelines: &UpdateSoftbodiesComputePipelines,
+        num_particles: u32,
     ) -> Box<dyn GpuFuture> {
         let mut cmd_buf = base.create_primary_command_buffer();
         unsafe {
@@ -205,6 +230,34 @@ impl UpdateSoftbodiesState {
                 )
                 .unwrap();
         }
+        cmd_buf
+            .bind_pipeline_compute(pipelines.identify_vertices.clone())
+            .unwrap()
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                pipelines.pipeline_layout.clone(),
+                0,
+                vec![
+                    self.particles_ds.clone(),
+                    self.intermediate_edges_ds.clone(),
+                    self.edge_map_ds.clone(),
+                ],
+            )
+            .unwrap()
+            .push_constants(
+                pipelines.pipeline_layout.clone(),
+                0,
+                UpdateSoftbodiesPushConstants {
+                    num_particles,
+                    grid_resolution: 0.0075,
+                    radius: 0.006,
+                    time: 0.0,
+                    edge_map_capacity: num_particles * 8,
+                },
+            )
+            .unwrap()
+            .dispatch([num_particles.div_ceil(256), 1, 1])
+            .unwrap();
         vulkano::sync::now(base.device.clone())
             .then_execute(base.queue.clone(), cmd_buf.build().unwrap())
             .unwrap()
@@ -218,6 +271,8 @@ pub struct UpdateSoftbodiesComputePipelines {
     particles_set_layout: Arc<DescriptorSetLayout>,
     intermediate_edges_set_layout: Arc<DescriptorSetLayout>,
     edge_map_set_layout: Arc<DescriptorSetLayout>,
+
+    pipeline_layout: Arc<PipelineLayout>,
 
     identify_vertices: Arc<ComputePipeline>,
     identify_edges: Arc<ComputePipeline>,
@@ -356,6 +411,7 @@ pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComp
         particles_set_layout,
         intermediate_edges_set_layout,
         edge_map_set_layout,
+        pipeline_layout,
         identify_vertices,
         identify_edges,
     }
