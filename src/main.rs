@@ -139,10 +139,13 @@ impl winit::application::ApplicationHandler for App {
                 .submit_initialize_cgrid(&base_gpu, &pipeline_manager.softbody_compute)
                 .join(
                     // this way the edge map starts out empty
-                    // and can follow a use->clear->populate loop
+                    // and we can have a use->clear->populate loop
                     world
                         .worldline_update_softbodies_state
-                        .clear_edge_map(&base_gpu, &pipeline_manager.worldline_update_softbodies),
+                        .submit_clear_edge_map(
+                            &base_gpu,
+                            &pipeline_manager.worldline_update_softbodies,
+                        ),
                 )
                 .then_signal_fence_and_flush()
                 .unwrap()

@@ -32,14 +32,16 @@ impl Display for FramePerfStats {
 pub fn get_frame_perf_stats(base: &BaseGpuState) -> FramePerfStats {
     FramePerfStats {
         rk4_time: Duration::from_nanos(
-            base.query_results[RK4_AFTER as usize] - base.query_results[TOP_OF_PHYSICS as usize],
+            base.query_results[RK4_AFTER as usize]
+                .saturating_sub(base.query_results[TOP_OF_PHYSICS as usize]),
         ),
         grid_update_time: Duration::from_nanos(
-            base.query_results[GRID_UPDATE_AFTER as usize] - base.query_results[RK4_AFTER as usize],
+            base.query_results[GRID_UPDATE_AFTER as usize]
+                .saturating_sub(base.query_results[RK4_AFTER as usize]),
         ),
         meshgen_time: Duration::from_nanos(
             base.query_results[BOTTOM_OF_MESHGEN as usize]
-                - base.query_results[TOP_OF_MESHGEN as usize],
+                .saturating_sub(base.query_results[TOP_OF_MESHGEN as usize]),
         ),
     }
 }

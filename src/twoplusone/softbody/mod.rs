@@ -776,6 +776,11 @@ impl SoftbodyState {
 
     // note that this function does NOT push the particles
     pub fn add_particles(&mut self, other: &mut Vec<Particle>, object: Object) {
+        log::debug!(
+            "Adding a softbody object with {} particles and metadata {:?}",
+            other.len(),
+            object
+        );
         self.particles.append(other);
         self.objects.push(object);
     }

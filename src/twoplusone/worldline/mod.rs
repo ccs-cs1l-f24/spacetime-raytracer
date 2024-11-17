@@ -192,7 +192,7 @@ impl UpdateSoftbodiesState {
         }
     }
 
-    pub fn clear_edge_map(
+    pub fn submit_clear_edge_map(
         &self,
         base: &BaseGpuState,
         pipelines: &UpdateSoftbodiesComputePipelines,
@@ -205,6 +205,23 @@ impl UpdateSoftbodiesState {
                 2,
                 self.edge_map_ds.clone(),
             )
+            .unwrap()
+            .bind_pipeline_compute(pipelines.clear_edge_map.clone())
+            .unwrap()
+            .push_constants(
+                pipelines.pipeline_layout.clone(),
+                0,
+                // the only push constant field accessed by clear_edge_map is edge_map_capacity
+                UpdateSoftbodiesPushConstants {
+                    num_particles: 0,
+                    grid_resolution: 0.0,
+                    radius: 0.0,
+                    time: 0.0,
+                    edge_map_capacity: SoftbodyState::MAX_PARTICLES as u32 * 8,
+                },
+            )
+            .unwrap()
+            .dispatch([SoftbodyState::MAX_PARTICLES as u32 * 8 / 256, 1, 1])
             .unwrap();
         vulkano::sync::now(base.device.clone())
             .then_execute(base.queue.clone(), cmd_buf.build().unwrap())
@@ -252,7 +269,7 @@ impl UpdateSoftbodiesState {
                     grid_resolution: 0.0075,
                     radius: 0.002,
                     time: 0.0,
-                    edge_map_capacity: num_particles * 8,
+                    edge_map_capacity: SoftbodyState::MAX_PARTICLES as u32 * 8,
                 },
             )
             .unwrap()
@@ -290,13 +307,14 @@ pub struct UpdateSoftbodiesComputePipelines {
     identify_vertices: Arc<ComputePipeline>,
     identify_edges: Arc<ComputePipeline>,
     // compact_edges: Arc<ComputePipeline>,
-    // clear_edge_map: Arc<ComputePipeline>,
+    clear_edge_map: Arc<ComputePipeline>,
     // write_edges_to_worldline: Arc<ComputePipeline>,
 }
 
 pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComputePipelines {
     base.register_cache("identify_vertices");
     base.register_cache("identify_edges");
+    base.register_cache("clear_edge_map");
     let particles_set_layout = DescriptorSetLayout::new(
         base.device.clone(),
         DescriptorSetLayoutCreateInfo {
@@ -420,6 +438,33 @@ pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComp
         },
     )
     .unwrap();
+    let shader = unsafe {
+        ShaderModule::new(
+            base.device.clone(),
+            ShaderModuleCreateInfo::new(
+                vulkano::shader::spirv::bytes_to_words(include_bytes!(
+                    "spv/worldline_updatesoftbodies_CLEAR_EDGE_MAP.spv"
+                ))
+                .unwrap()
+                .borrow(),
+            ),
+        )
+        .unwrap()
+    }
+    .entry_point("main")
+    .unwrap();
+    let clear_edge_map = ComputePipeline::new(
+        base.device.clone(),
+        Some(base.get_cache("clear_edge_map")),
+        ComputePipelineCreateInfo {
+            stage: PipelineShaderStageCreateInfo::new(shader.clone()),
+            ..ComputePipelineCreateInfo::stage_layout(
+                PipelineShaderStageCreateInfo::new(shader),
+                pipeline_layout.clone(),
+            )
+        },
+    )
+    .unwrap();
     UpdateSoftbodiesComputePipelines {
         particles_set_layout,
         intermediate_edges_set_layout,
@@ -427,5 +472,6 @@ pub fn create_update_softbodies(base: &mut BaseGpuState) -> UpdateSoftbodiesComp
         pipeline_layout,
         identify_vertices,
         identify_edges,
+        clear_edge_map,
     }
 }
