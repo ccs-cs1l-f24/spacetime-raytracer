@@ -7,6 +7,7 @@ pub const RK4_AFTER: u32 = 1;
 pub const GRID_UPDATE_AFTER: u32 = 2;
 
 pub const TOP_OF_MESHGEN: u32 = 3;
+pub const BOTTOM_OF_MESHGEN: u32 = 4;
 
 pub const NUM_QUERIES: u32 = 32;
 
@@ -15,14 +16,15 @@ pub const NUM_QUERIES: u32 = 32;
 pub struct FramePerfStats {
     pub rk4_time: Duration,
     pub grid_update_time: Duration,
+    pub meshgen_time: Duration,
 }
 
 impl Display for FramePerfStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Rk4: {:?}\nGrid Update: {:?}",
-            self.rk4_time, self.grid_update_time,
+            "Rk4: {:?}\nGrid Update: {:?}\nMeshgen: {:?}",
+            self.rk4_time, self.grid_update_time, self.meshgen_time,
         )
     }
 }
@@ -34,6 +36,10 @@ pub fn get_frame_perf_stats(base: &BaseGpuState) -> FramePerfStats {
         ),
         grid_update_time: Duration::from_nanos(
             base.query_results[GRID_UPDATE_AFTER as usize] - base.query_results[RK4_AFTER as usize],
+        ),
+        meshgen_time: Duration::from_nanos(
+            base.query_results[BOTTOM_OF_MESHGEN as usize]
+                - base.query_results[TOP_OF_MESHGEN as usize],
         ),
     }
 }

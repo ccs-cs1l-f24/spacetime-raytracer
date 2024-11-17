@@ -116,12 +116,18 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
 
         Particle particle = particles[index];
 
+        // TODO ok so the problem seems to be that vertices often go without neighbors
+        // cause if the geometry is at all funky vertices on the correct side of the border
+        // still get occluded!!
+        // i think this happens on diagonals...
+        // god how am i supposed to make this work
+
         // plot 4 points just outside the "area of effect" of this particle
         // in a little diamond around the particle
-        vec2 p1 = particle.ground_pos - vec2(radius, 0.0); // left
-        vec2 p2 = particle.ground_pos + vec2(radius, 0.0); // right
-        vec2 p3 = particle.ground_pos - vec2(0.0, radius); // top
-        vec2 p4 = particle.ground_pos + vec2(0.0, radius); // bottom
+        vec2 p1 = particle.ground_pos - vec2(0.0035, 0.0); // left
+        vec2 p2 = particle.ground_pos + vec2(0.0035, 0.0); // right
+        vec2 p3 = particle.ground_pos - vec2(0.0, 0.0035); // top
+        vec2 p4 = particle.ground_pos + vec2(0.0, 0.0035); // bottom
 
         bool i1, i2, i3, i4 = true;
 
@@ -132,7 +138,7 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
             do {
                 Particle other = particles[spatial_lookup[index++].y];
                 // ignore yourself
-                if (other.ground_pos == particle.ground_pos) continue;
+                if (other.id == particle.id) continue;
                 // ignore particles that aren't the same object as you
                 if (other.object_index != particle.object_index) continue;
                 // are any of the 4 points contained in another particle's radius
@@ -143,6 +149,7 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
             } while (index < num_particles && spatial_lookup[index].x == spatial_lookup[index + 1].x);
         }
 
+        IntermediateSoftbodyWorldlineVertex empty = IntermediateSoftbodyWorldlineVertex(vec3(0.0), 0, 0, 0, 0, -1);
         IntermediateSoftbodyWorldlineVertex vtx;
         vtx.object_index = particle.object_index;
         if (i1) {
@@ -151,32 +158,32 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
             vtx.sibling_1_id = i3 ? PACK(particle, 4) : -1;
             vtx.sibling_2_id = i4 ? PACK(particle, 8) : -1;
             vtx.flag = 0;
-        } else vtx.flag = -1;
-        vertices[index * 4] = vtx;
+            vertices[index * 4] = vtx;
+        } else vertices[index * 4] = empty;
         if (i2) {
             vtx.pos = vec3(p2, time);
             vtx.packed_id = PACK(particle, 2);
             vtx.sibling_1_id = i3 ? PACK(particle, 4) : -1;
             vtx.sibling_2_id = i4 ? PACK(particle, 8) : -1;
             vtx.flag = 0;
-        } else vtx.flag = -1;
-        vertices[index * 4 + 1] = vtx;
+            vertices[index * 4 + 1] = vtx;
+        } else vertices[index * 4 + 1] = empty;
         if (i3) {
             vtx.pos = vec3(p3, time);
             vtx.packed_id = PACK(particle, 4);
             vtx.sibling_1_id = i1 ? PACK(particle, 1) : -1;
             vtx.sibling_2_id = i2 ? PACK(particle, 2) : -1;
             vtx.flag = 0;
-        } else vtx.flag = -1;
-        vertices[index * 4 + 2] = vtx;
+            vertices[index * 4 + 2] = vtx;
+        } else vertices[index * 4 + 2] = empty;
         if (i4) {
             vtx.pos = vec3(p4, time);
             vtx.packed_id = PACK(particle, 8);
             vtx.sibling_1_id = i1 ? PACK(particle, 1) : -1;
             vtx.sibling_2_id = i2 ? PACK(particle, 2) : -1;
             vtx.flag = 0;
-        } else vtx.flag = -1;
-        vertices[index * 4 + 3] = vtx;
+            vertices[index * 4 + 3] = vtx;
+        } else vertices[index * 4 + 3] = empty;
 
         // so that vulkano doesn't complain when i bind all the descsets
         int _ = ledger[0];
@@ -226,6 +233,7 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
         float shortest_distance = 999.0; // ridiculously big init distances
         float second_shortest_distance = 1000.0;
         // if we've reached this part of the shader then there MUST be enough nearby vertices to populate these
+        // if there aren't then we're writing whatever random garbage these get autoinitialized with
         IntermediateSoftbodyWorldlineVertex closest_vtx;
         IntermediateSoftbodyWorldlineVertex second_closest_vtx;
         for (int i = 0; i < 9; i++) { // 0 to 8 (inclusive) --- i=4 is 0,0
@@ -259,6 +267,9 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
             edges[index * 2] = Edge(WorldlineVertex(vtx.pos, vtx.object_index), WorldlineVertex(closest_vtx.pos, closest_vtx.object_index));
             edges[index * 2 + 1] = Edge(WorldlineVertex(vtx.pos, vtx.object_index), WorldlineVertex(second_closest_vtx.pos, second_closest_vtx.object_index));
         }
+
+        // so that vulkano doesn't complain when i bind all the descsets
+        int _ = ledger[0];
     }
 #endif
 

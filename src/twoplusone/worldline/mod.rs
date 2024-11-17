@@ -250,14 +250,27 @@ impl UpdateSoftbodiesState {
                 UpdateSoftbodiesPushConstants {
                     num_particles,
                     grid_resolution: 0.0075,
-                    radius: 0.006,
+                    radius: 0.002,
                     time: 0.0,
                     edge_map_capacity: num_particles * 8,
                 },
             )
             .unwrap()
             .dispatch([num_particles.div_ceil(256), 1, 1])
+            .unwrap()
+            .bind_pipeline_compute(pipelines.identify_edges.clone())
+            .unwrap()
+            .dispatch([(4 * num_particles).div_ceil(256), 1, 1])
             .unwrap();
+        unsafe {
+            cmd_buf
+                .write_timestamp(
+                    base.query_pool.clone(),
+                    crate::querybank::BOTTOM_OF_MESHGEN,
+                    PipelineStage::BottomOfPipe,
+                )
+                .unwrap();
+        }
         vulkano::sync::now(base.device.clone())
             .then_execute(base.queue.clone(), cmd_buf.build().unwrap())
             .unwrap()
