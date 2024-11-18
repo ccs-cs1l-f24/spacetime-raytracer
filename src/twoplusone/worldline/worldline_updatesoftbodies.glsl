@@ -124,10 +124,10 @@ bool has_edge(IntermediateSoftbodyWorldlineVertex v1, IntermediateSoftbodyWorldl
 
         // plot 4 points just outside the "area of effect" of this particle
         // in a little diamond around the particle
-        vec2 p1 = particle.ground_pos - vec2(0.0035, 0.0); // left
-        vec2 p2 = particle.ground_pos + vec2(0.0035, 0.0); // right
-        vec2 p3 = particle.ground_pos - vec2(0.0, 0.0035); // top
-        vec2 p4 = particle.ground_pos + vec2(0.0, 0.0035); // bottom
+        vec2 p1 = particle.ground_pos - vec2(radius, 0.0); // left
+        vec2 p2 = particle.ground_pos + vec2(radius, 0.0); // right
+        vec2 p3 = particle.ground_pos - vec2(0.0, radius); // top
+        vec2 p4 = particle.ground_pos + vec2(0.0, radius); // bottom
 
         bool i1, i2, i3, i4 = true;
 

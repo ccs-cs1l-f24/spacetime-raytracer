@@ -212,6 +212,7 @@ impl UpdateSoftbodiesState {
                 pipelines.pipeline_layout.clone(),
                 0,
                 // the only push constant field accessed by clear_edge_map is edge_map_capacity
+                // so we get to be silly with the rest of the fields :P
                 UpdateSoftbodiesPushConstants {
                     num_particles: 0,
                     grid_resolution: 0.0,
@@ -266,7 +267,7 @@ impl UpdateSoftbodiesState {
                 0,
                 UpdateSoftbodiesPushConstants {
                     num_particles,
-                    grid_resolution: 0.0075,
+                    grid_resolution: 0.0018,
                     radius: 0.002,
                     time: 0.0,
                     edge_map_capacity: SoftbodyState::MAX_PARTICLES as u32 * 8,
