@@ -115,7 +115,7 @@ pub struct CollisionGridPushConstants {
 static MAX_PARTICLE_ID: AtomicU32 = AtomicU32::new(0);
 
 // we want resolutions of approximately 1 lightstep (ch where h is simulation tick)
-// let's set an arbitrary resolution of 0.0035 cs per pixel
+// see super::consts (consts mod in src/twoplusone/mod.rs) for more on that
 // please only feed this 8-bit depth RGB images cause everything else will fail
 // is BLOCKING ON GPU ACTIONS
 pub fn image_to_softbody<R: std::io::Read>(
@@ -145,8 +145,8 @@ pub fn image_to_softbody<R: std::io::Read>(
                 immediate_neighbors: [-1, -1, -1, -1],
                 diagonal_neighbors: [-1, -1, -1, -1],
                 ground_pos: [
-                    pos.0 as f32 * 0.0035 + ground_pos_offset[0],
-                    pos.1 as f32 * 0.0035 + ground_pos_offset[1],
+                    pos.0 as f32 * super::consts::IMMEDIATE_NEIGHBOR_DIST + ground_pos_offset[0],
+                    pos.1 as f32 * super::consts::IMMEDIATE_NEIGHBOR_DIST + ground_pos_offset[1],
                 ],
                 ground_vel: starting_ground_vel,
                 rest_mass: 1.0,
@@ -595,6 +595,7 @@ impl SoftbodyState {
 
     // unstable, strictly worse than rk4
     // well it probably is faster but not enough to justify the explosions
+    // you don't want to use it is what i'm saying
     #[allow(unused)]
     #[allow(dependency_on_unit_never_type_fallback)]
     fn dispatch_euler(
@@ -699,7 +700,7 @@ impl SoftbodyState {
     }
 
     // https://www.youtube.com/watch?v=rSKMYc1CQHE
-    // sebastian lague
+    // sebastian lague <3
     fn dispatch_update_compute_grid(
         &self,
         pipelines: &SoftbodyComputePipelines,
@@ -761,10 +762,6 @@ impl SoftbodyState {
             .dispatch([(self.particles.len() as u32).div_ceil(256), 1, 1])
             .unwrap();
     }
-
-    // pub fn cull_meshes(&self, pipelines: &SoftbodyComputePipelines) {
-    //     todo!()
-    // }
 
     // note that this function does NOT push the particles
     pub fn add_particles(&mut self, other: &mut Vec<Particle>, object: Object) {
