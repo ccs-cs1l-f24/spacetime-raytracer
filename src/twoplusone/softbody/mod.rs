@@ -90,15 +90,15 @@ pub struct Object {
 #[derive(BufferContents, Debug, Clone)]
 #[repr(C)]
 pub struct Rk4PushConstants {
-    num_particles: u32,
-    h: f32,
-    immediate_neighbor_dist: f32,
-    diagonal_neighbor_dist: f32,
-    k: f32,
-    grid_resolution: f32,
-    collision_repulsion_coefficient: f32,
-    collision_distance: f32,
-    bond_break_threshold: f32,
+    pub(super) num_particles: u32,
+    pub(super) h: f32,
+    pub(super) immediate_neighbor_dist: f32,
+    pub(super) diagonal_neighbor_dist: f32,
+    pub(super) k: f32,
+    pub(super) grid_resolution: f32,
+    pub(super) collision_repulsion_coefficient: f32,
+    pub(super) collision_distance: f32,
+    pub(super) bond_break_threshold: f32,
 }
 
 #[derive(BufferContents, Debug, Clone)]
@@ -634,16 +634,8 @@ impl SoftbodyState {
                 pipelines.rk4_pipeline_layout.clone(),
                 0,
                 Rk4PushConstants {
-                    // TODO make these more configurable
                     num_particles: self.particles.len() as u32,
-                    h: 0.005,
-                    immediate_neighbor_dist: 0.0035,
-                    diagonal_neighbor_dist: (0.0035f32 * 0.0035 + 0.0035 * 0.0035).sqrt(),
-                    k: 12500.0,
-                    grid_resolution: 0.0075,
-                    collision_distance: 0.002,
-                    collision_repulsion_coefficient: 100.0,
-                    bond_break_threshold: 0.01,
+                    ..super::consts::RK4_PUSH_CONSTS
                 },
             )
             .unwrap()
@@ -715,7 +707,7 @@ impl SoftbodyState {
     ) {
         let pcs = CollisionGridPushConstants {
             num_particles: self.particles.len() as u32,
-            grid_resolution: 0.0075,
+            grid_resolution: super::consts::GRID_RESOLUTION,
             group_width: 0,
             group_height: 0,
             step_index: 0,

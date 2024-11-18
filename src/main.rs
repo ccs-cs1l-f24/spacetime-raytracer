@@ -261,8 +261,6 @@ impl winit::application::ApplicationHandler for App {
 
                     base_gpu.update_query_results();
                     self.prev_frame_stats = crate::querybank::get_frame_perf_stats(&base_gpu);
-                    // log::debug!("{:?}", frame_stats);
-                    // println!("{:?}", &base_gpu.query_results[..4]);
                     base_gpu.reset_query_pool(); // ALL QUERIES SHOULD GO AFTER HERE
 
                     let worldline_update_future = world

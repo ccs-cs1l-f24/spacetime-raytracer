@@ -248,38 +248,38 @@ impl UpdateSoftbodiesState {
                 )
                 .unwrap();
         }
-        cmd_buf
-            .bind_pipeline_compute(pipelines.identify_vertices.clone())
-            .unwrap()
-            .bind_descriptor_sets(
-                PipelineBindPoint::Compute,
-                pipelines.pipeline_layout.clone(),
-                0,
-                vec![
-                    self.particles_ds.clone(),
-                    self.intermediate_edges_ds.clone(),
-                    self.edge_map_ds.clone(),
-                ],
-            )
-            .unwrap()
-            .push_constants(
-                pipelines.pipeline_layout.clone(),
-                0,
-                UpdateSoftbodiesPushConstants {
-                    num_particles,
-                    grid_resolution: 0.0018,
-                    radius: 0.002,
-                    time: 0.0,
-                    edge_map_capacity: SoftbodyState::MAX_PARTICLES as u32 * 8,
-                },
-            )
-            .unwrap()
-            .dispatch([num_particles.div_ceil(256), 1, 1])
-            .unwrap()
-            .bind_pipeline_compute(pipelines.identify_edges.clone())
-            .unwrap()
-            .dispatch([(4 * num_particles).div_ceil(256), 1, 1])
-            .unwrap();
+        // cmd_buf
+        //     .bind_pipeline_compute(pipelines.identify_vertices.clone())
+        //     .unwrap()
+        //     .bind_descriptor_sets(
+        //         PipelineBindPoint::Compute,
+        //         pipelines.pipeline_layout.clone(),
+        //         0,
+        //         vec![
+        //             self.particles_ds.clone(),
+        //             self.intermediate_edges_ds.clone(),
+        //             self.edge_map_ds.clone(),
+        //         ],
+        //     )
+        //     .unwrap()
+        //     .push_constants(
+        //         pipelines.pipeline_layout.clone(),
+        //         0,
+        //         UpdateSoftbodiesPushConstants {
+        //             num_particles,
+        //             grid_resolution: 0.003,
+        //             radius: 0.002,
+        //             time: 0.0,
+        //             edge_map_capacity: SoftbodyState::MAX_PARTICLES as u32 * 8,
+        //         },
+        //     )
+        //     .unwrap()
+        //     .dispatch([num_particles.div_ceil(256), 1, 1])
+        //     .unwrap()
+        //     .bind_pipeline_compute(pipelines.identify_edges.clone())
+        //     .unwrap()
+        //     .dispatch([(4 * num_particles).div_ceil(256), 1, 1])
+        //     .unwrap();
         unsafe {
             cmd_buf
                 .write_timestamp(
