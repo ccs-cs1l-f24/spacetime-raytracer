@@ -1,3 +1,1 @@
 [TODO write up about a page on the meshing problem]
-
-Given a large array of particles, generate a mesh
