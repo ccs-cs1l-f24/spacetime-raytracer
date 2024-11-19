@@ -13,10 +13,10 @@ pub mod consts {
     pub(super) const H: f32 = 0.005;
     pub(super) const K: f32 = 15000.0;
     pub(super) const IMMEDIATE_NEIGHBOR_DIST: f32 = 0.0035;
-    pub(super) const DIAGONAL_NEIGHBOR_DIST: f32 = 0.00494974747;
+    pub(super) const DIAGONAL_NEIGHBOR_DIST: f32 = 0.00494974747; // gotta love sqrt not being const :/
     pub(super) const GRID_RESOLUTION: f32 = 0.005;
     pub(super) const COLLISION_DISTANCE: f32 = 0.002;
-    pub(super) const COLLISION_REPULSION_COEFFICIENT: f32 = 75.0;
+    pub(super) const COLLISION_REPULSION_COEFFICIENT: f32 = 100.0;
     pub(super) const BOND_BREAK_THRESHOLD: f32 = 0.01;
     pub(super) const RK4_PUSH_CONSTS: super::softbody::Rk4PushConstants =
         super::softbody::Rk4PushConstants {
