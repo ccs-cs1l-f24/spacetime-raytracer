@@ -53,17 +53,6 @@ pub struct UpdateSoftbodiesPushConstants {
 
 #[derive(BufferContents, Debug, Clone)]
 #[repr(C)]
-pub struct IntermediateSoftbodyWorldlineVertex {
-    pub ground_pos: [f32; 3],
-    pub object_index: u32,
-    pub packed_id: u32,
-    pub sibling_1_id: i32,
-    pub sibling_2_id: i32,
-    pub flag: i32,
-}
-
-#[derive(BufferContents, Debug, Clone)]
-#[repr(C)]
 pub struct WorldlineVertex {
     pub pos: [f32; 3],
     pub object_index: u32,

@@ -61,6 +61,7 @@ void main() {
         // OK, now we can finally do things with this cell coord we've identified
         // first, let's figure out whether any of the surrounding cell grids are occupied by any particles
         uint neighbor_index;
+        bool neighbor_cells_exist[8]; // (exist and contain particles of the same object)
         for (int j = 0; j < 9; j++) {
             if (j == 4) continue;
             bool does_neighbor_exist = false;
@@ -74,6 +75,7 @@ void main() {
                 }
             } while (neighbor_index < num_particles && spatial_lookup[neighbor_index].x == spatial_lookup[neighbor_index + 1].x);
             // now we've determined whether neighbor cell grid j exists and is of the same object
+            neighbor_cells_exist[j < 4 ? j : j - 1] = does_neighbor_exist;
         }
     } while (i < num_particles && spatial_lookup[i].x == spatial_lookup[i + 1].x);
 }
