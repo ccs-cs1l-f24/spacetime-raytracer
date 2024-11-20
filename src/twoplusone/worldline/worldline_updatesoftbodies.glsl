@@ -62,12 +62,13 @@ void main() {
         // first, let's figure out whether any of the surrounding cell grids are occupied by any particles
         uint neighbor_index;
         for (int j = 0; j < 9; j++) {
-            bool does_neighbor_exist = false;
             if (j == 4) continue;
-            neighbor_index = start_indices[hash_key_from_cell(cell_coord + ivec2((j % 3) - 1, (j / 3) - 1), num_particles)];
+            bool does_neighbor_exist = false;
+            ivec2 neighbor_cell_coord = cell_coord + ivec2((j % 3) - 1, (j / 3) - 1);
+            neighbor_index = start_indices[hash_key_from_cell(neighbor_cell_coord, num_particles)];
             do {
                 Particle p2 = particles[spatial_lookup[neighbor_index++].y];
-                if (p2.object_index == p.object_index && ivec2(floor(p2.ground_pos / grid_resolution)) == cell_coord) {
+                if (p2.object_index == p.object_index && ivec2(floor(p2.ground_pos / grid_resolution)) == neighbor_cell_coord) {
                     does_neighbor_exist = true;
                     break;
                 }
