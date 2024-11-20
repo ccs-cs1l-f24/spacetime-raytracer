@@ -67,12 +67,12 @@ void main() {
             neighbor_index = start_indices[hash_key_from_cell(cell_coord + ivec2((j % 3) - 1, (j / 3) - 1), num_particles)];
             do {
                 Particle p2 = particles[spatial_lookup[neighbor_index++].y];
-                if (ivec2(floor(p2.ground_pos / grid_resolution)) == cell_coord) {
+                if (p2.object_index == p.object_index && ivec2(floor(p2.ground_pos / grid_resolution)) == cell_coord) {
                     does_neighbor_exist = true;
                     break;
                 }
             } while (neighbor_index < num_particles && spatial_lookup[neighbor_index].x == spatial_lookup[neighbor_index + 1].x);
-            // now we've determined whether neighbor j exists3
+            // now we've determined whether neighbor cell grid j exists and is of the same object
         }
     } while (i < num_particles && spatial_lookup[i].x == spatial_lookup[i + 1].x);
 }
