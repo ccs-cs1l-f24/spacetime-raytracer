@@ -10,6 +10,9 @@ mod utils;
 // since many are shared across submodules
 // (this is to say the collision grid is used by the worldline module)
 pub mod consts {
+    // must be greater than DIAGONAL_NEIGHBOR_DIST
+    // (maximum radius at which a particle can influence another in a single rk4 invocation)
+    // so that the speed of sound is less than c
     pub(super) const H: f32 = 0.005;
     pub(super) const K: f32 = 15000.0;
     pub(super) const IMMEDIATE_NEIGHBOR_DIST: f32 = 0.0035;
@@ -79,12 +82,13 @@ impl World {
 
 pub fn create_world(base: &BaseGpuState, pipelines: &PipelineManager) -> World {
     let mut softbody_state = softbody::SoftbodyState::create(base, &pipelines.softbody_compute);
+    // temporary tests
     softbody_state.add_particles(
         &mut softbody::image_to_softbody(
             include_bytes!("../../softbodyimages/testimg4.png").as_slice(),
             0,
             [0.0, 0.0],
-            [0.2, 0.2],
+            [0.1, 0.1],
         ),
         softbody::Object {
             offset: 0,
@@ -98,7 +102,7 @@ pub fn create_world(base: &BaseGpuState, pipelines: &PipelineManager) -> World {
             include_bytes!("../../softbodyimages/testimg5.png").as_slice(),
             1,
             [1.2, 0.8],
-            [-0.2, -0.2],
+            [-0.1, -0.1],
         ),
         softbody::Object {
             offset: softbody_state.num_particles() as u32,

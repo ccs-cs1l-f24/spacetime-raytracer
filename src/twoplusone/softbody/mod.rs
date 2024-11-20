@@ -57,6 +57,8 @@ pub mod point_render_nr;
 //
 // yes this does mean everything with physics will act somewhere between cloth and jello
 // it'll be delightful :D
+//
+// as to meshing... refer to the twoplusone/worldline module for that it's a whole other thing
 
 // 64 bytes since glsl auto-pads from 56 to 64
 #[derive(BufferContents, Debug, Clone)]
@@ -701,6 +703,7 @@ impl SoftbodyState {
 
     // https://www.youtube.com/watch?v=rSKMYc1CQHE
     // sebastian lague <3
+    // bitonic merge sort is clever i need to study more parallel algorithms
     fn dispatch_update_compute_grid(
         &self,
         pipelines: &SoftbodyComputePipelines,

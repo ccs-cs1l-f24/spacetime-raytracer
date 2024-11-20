@@ -94,16 +94,6 @@ vec2 get_forces() {
         index = start_indices[hash_key_from_cell(cell_coord + ivec2((i % 3) - 1, (i / 3) - 1), num_particles)];
         if (index == 4294967295) continue; // no particles at that grid cell
         do {
-            // // no colliding when you're fully inside the softbody!
-            // // NEVERMIND we actually want that
-            // if (particle.immediate_neighbors[0] != -1 &&
-            //     particle.immediate_neighbors[1] != -1 &&
-            //     particle.immediate_neighbors[2] != -1 &&
-            //     particle.immediate_neighbors[3] != -1 && 
-            //     particle.diagonal_neighbors[0] != -1 &&
-            //     particle.diagonal_neighbors[1] != -1 &&
-            //     particle.diagonal_neighbors[2] != -1 &&
-            //     particle.diagonal_neighbors[3] != -1) break;
             Particle p2 = state_particles[spatial_lookup[index++].y];
             // no colliding with yourself!
             if (p2.ground_pos == particle.ground_pos) continue;

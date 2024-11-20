@@ -59,8 +59,21 @@ void main() {
         if (bail) continue;
         coords[diff_tiles++] = cell_coord;
         // OK, now we can finally do things with this cell coord we've identified
-        // namely, potentially placing a vertex/some edges
-        // TODO
+        // first, let's figure out whether any of the surrounding cell grids are occupied by any particles
+        uint neighbor_index;
+        for (int j = 0; j < 9; j++) {
+            bool does_neighbor_exist = false;
+            if (j == 4) continue;
+            neighbor_index = start_indices[hash_key_from_cell(cell_coord + ivec2((j % 3) - 1, (j / 3) - 1), num_particles)];
+            do {
+                Particle p2 = particles[spatial_lookup[neighbor_index++].y];
+                if (ivec2(floor(p2.ground_pos / grid_resolution)) == cell_coord) {
+                    does_neighbor_exist = true;
+                    break;
+                }
+            } while (neighbor_index < num_particles && spatial_lookup[neighbor_index].x == spatial_lookup[neighbor_index + 1].x);
+            // now we've determined whether neighbor j exists3
+        }
     } while (i < num_particles && spatial_lookup[i].x == spatial_lookup[i + 1].x);
 }
 #endif
