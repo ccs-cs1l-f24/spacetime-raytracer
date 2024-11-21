@@ -434,11 +434,13 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
     // for fun :)
     log::info!("List of Vulkan debugging layers available to use:");
     let layers = library.layer_properties().unwrap();
-    for l in layers {
-        log::info!("\t{}", l.name());
-    }
-
-    let layers = vec!["VK_LAYER_KHRONOS_validation".to_owned()];
+    let layers = layers
+        .filter(|l| {
+            log::info!("- {} : {}", l.name(), l.description());
+            l.name() == "VK_LAYER_KHRONOS_validation"
+        })
+        .map(|l| l.name().to_owned())
+        .collect();
 
     let instance = Instance::new(
         library,
