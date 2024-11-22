@@ -432,7 +432,7 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
 
     // enumerate possible layers
     // for fun :)
-    log::info!("List of Vulkan debugging layers available to use:");
+    log::info!("List of Vulkan layers available to use:");
     let layers = library.layer_properties().unwrap();
     let layers = layers
         .filter(|l| {
@@ -441,6 +441,7 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
         })
         .map(|l| l.name().to_owned())
         .collect();
+    log::info!("Vulkan layers to be used: {:?}", layers);
 
     let instance = Instance::new(
         library,
