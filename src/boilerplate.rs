@@ -602,15 +602,13 @@ pub fn create_gpu_state(window: Arc<winit::window::Window>) -> BaseGpuState {
                 (p_d_name == name) as u8
             } else {
                 // how to weigh the device properties against each other
-                let (rtx, discrete) = (4, 3);
                 p_d.supported_extensions()
                     .contains(&desired_device_extensions) as u8
-                    * rtx
+                    * 20
                     + match props.device_type {
-                        PhysicalDeviceType::DiscreteGpu => discrete,
-                        PhysicalDeviceType::IntegratedGpu => 2,
-                        PhysicalDeviceType::VirtualGpu => 1,
-                        _ => 0,
+                        PhysicalDeviceType::DiscreteGpu => 75,
+                        PhysicalDeviceType::IntegratedGpu => 50,
+                        _ => 0, // we don't like cpu devices they're slow
                     }
             }
         })
